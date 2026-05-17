@@ -22,9 +22,12 @@ public sealed class AgentChatService(
         {
             var agent = await agentFactory.GetAgentAsync(ct).ConfigureAwait(false);
 
-            // Restore or create a session (carries full conversation history)
+            // Restore or create a session with CLIENT-managed history.
+            // Do NOT pass phoneNumber as conversationId — that overload uses server-managed
+            // history which requires the AI service to maintain conversation state, and
+            // Azure AI Foundry chat completions does not support that.
             var session = sessionStore.TryGet(phoneNumber)
-                ?? await agent.CreateSessionAsync(phoneNumber, ct).ConfigureAwait(false);
+                ?? await agent.CreateSessionAsync(ct).ConfigureAwait(false);
 
             // Run the agent
             var response = await agent.RunAsync(userMessage, session, cancellationToken: ct).ConfigureAwait(false);
