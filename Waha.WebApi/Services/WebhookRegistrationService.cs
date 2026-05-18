@@ -59,8 +59,9 @@ public sealed class WebhookRegistrationService(
             }
             catch (Exception ex) when (attempt < 5 && !ct.IsCancellationRequested)
             {
-                logger.LogWarning(ex, "Attempt {Attempt}/5 to register webhook failed. Retrying in 5s...", attempt);
-                await Task.Delay(TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
+                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)); // 1s, 2s, 4s, 8s, 16s
+                logger.LogWarning(ex, "Attempt {Attempt}/5 to register webhook failed. Retrying in {Delay}s...", attempt, delay.TotalSeconds);
+                await Task.Delay(delay, ct).ConfigureAwait(false);
             }
         }
     }

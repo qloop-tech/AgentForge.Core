@@ -10,7 +10,7 @@ public sealed class FeedbackHandler(
     // WAHA free (WEBJS) does not support native polls, so we use a text-based numbered menu.
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _pendingFeedback = new();
 
-    public bool IsPendingFeedback(string chatId) => _pendingFeedback.ContainsKey(chatId);
+    public bool IsPendingFeedback(string chatId) => _pendingFeedback.TryGetValue(chatId, out _);
 
     public void ClearPendingFeedback(string chatId) => _pendingFeedback.TryRemove(chatId, out _);
 

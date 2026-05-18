@@ -1,3 +1,4 @@
+using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using Waha.McpServer.Resources;
 using Waha.McpServer.Services;
@@ -18,7 +19,7 @@ builder.Services.AddSingleton<PolicyService>();
 builder.Services
     .AddMcpServer(options =>
     {
-        options.ServerInfo = new() { Name = "RoyalJourneysMCP", Version = "1.0.0" };
+        options.ServerInfo = new Implementation { Name = "RoyalJourneysMCP", Version = "1.0.0" };
     })
     .WithToolsFromAssembly(typeof(TourSearchTools).Assembly)
     .WithResourcesFromAssembly(typeof(TravelResources).Assembly)

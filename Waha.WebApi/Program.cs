@@ -1,5 +1,6 @@
 using Waha.WebApi.Endpoints;
 using Waha.WebApi.Handlers;
+using Waha.WebApi.Queue;
 using Waha.WebApi.Scheduling;
 using Waha.WebApi.Services;
 
@@ -47,6 +48,8 @@ builder.Services.AddScoped<TravelBotHandler>();
 builder.Services.AddScoped<FeedbackHandler>();
 
 // ─── Background Services ──────────────────────────────────────────────────────
+builder.Services.AddSingleton<WhatsAppMessageQueue>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<WhatsAppMessageQueue>());
 builder.Services.AddSingleton<SchedulerService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SchedulerService>());
 builder.Services.AddSingleton<WebhookRegistrationService>();

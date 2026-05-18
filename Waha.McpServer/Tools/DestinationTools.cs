@@ -13,24 +13,21 @@ public class DestinationTools(DestinationService destinationService)
         [Description("Destination name (e.g. 'Goa', 'Kerala', 'Manali', 'Rajasthan', 'Andaman')")] string destination)
     {
         var guide = destinationService.GetByDestination(destination);
-        if (guide is null)
-            return $"No detailed guide found for '{destination}'. Try one of: {string.Join(", ", destinationService.GetAll().Select(d => d.Destination))}";
+        return guide is null ? $"No detailed guide found for '{destination}'. Try one of: {string.Join(", ", destinationService.GetAll().Select(d => d.Destination))}" : $"""
+             📍 *{guide.Destination}* — {guide.Region}
 
-        return $"""
-            📍 *{guide.Destination}* — {guide.Region}
+             🌤 *Best Time to Visit:* {guide.PeakSeason}
+             🌡 *Temperature:* Winter: {guide.Weather.WinterTemp} | Summer: {guide.Weather.SummerTemp}
+             💰 *Avg Budget/Day:* ₹{guide.AvgBudgetPerDayINR:N0}/person
 
-            🌤 *Best Time to Visit:* {guide.PeakSeason}
-            🌡 *Temperature:* Winter: {guide.Weather.WinterTemp} | Summer: {guide.Weather.SummerTemp}
-            💰 *Avg Budget/Day:* ₹{guide.AvgBudgetPerDayINR:N0}/person
+             🏛 *Top Attractions:*
+             {string.Join("\n", guide.TopAttractions.Select(a => $"  • {a}"))}
 
-            🏛 *Top Attractions:*
-            {string.Join("\n", guide.TopAttractions.Select(a => $"  • {a}"))}
+             🍽 *Must-try Cuisine:*
+             {string.Join(", ", guide.Cuisine)}
 
-            🍽 *Must-try Cuisine:*
-            {string.Join(", ", guide.Cuisine)}
-
-            📅 *Avoid:* {guide.OffSeason}
-            """;
+             📅 *Avoid:* {guide.OffSeason}
+             """;
     }
 
     [McpServerTool(Name = "get_visa_requirements", ReadOnly = true)]

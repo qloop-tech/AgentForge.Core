@@ -13,7 +13,7 @@ namespace Waha.WebApi.Services;
 public sealed class TravelAgentFactory(
     IChatClient chatClient,
     McpClientProvider mcpProvider,
-    ILoggerFactory loggerFactory)
+    ILoggerFactory loggerFactory) : IAsyncDisposable
 {
     private ChatClientAgent? _agent;
     private readonly SemaphoreSlim _lock = new(1, 1);
@@ -44,5 +44,19 @@ public sealed class TravelAgentFactory(
         {
             _lock.Release();
         }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        // ChatClientAgent may gain disposal in a future MAF release — check defensively
+        if (_agent is object agentObj)
+        {
+            if (agentObj is IAsyncDisposable asyncDisposable)
+                await asyncDisposable.DisposeAsync().ConfigureAwait(false);
+            else if (agentObj is IDisposable disposable)
+                disposable.Dispose();
+        }
+
+        _lock.Dispose();
     }
 }

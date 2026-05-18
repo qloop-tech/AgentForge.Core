@@ -9,6 +9,8 @@ public sealed class SchedulerService(
     ILogger<SchedulerService> logger) : BackgroundService
 {
     private readonly List<ReminderJob> _jobs = [];
+    // System.Threading.Lock (C# 13 / .NET 9+) — higher-perf than locking on `object`
+    private readonly Lock _jobsLock = new();
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -23,12 +25,15 @@ public sealed class SchedulerService(
 
     public void ScheduleDepartureReminders(string chatId, string tourName, DateTimeOffset departureDate)
     {
-        _jobs.AddRange(
-        [
-            new ReminderJob(chatId, ReminderType.PreDeparture7Day, tourName, departureDate.AddDays(-7)),
-            new ReminderJob(chatId, ReminderType.PreDeparture1Day, tourName, departureDate.AddDays(-1)),
-            new ReminderJob(chatId, ReminderType.DepartureDay, tourName, departureDate),
-        ]);
+        lock (_jobsLock)
+        {
+            _jobs.AddRange(
+            [
+                new ReminderJob(chatId, ReminderType.PreDeparture7Day, tourName, departureDate.AddDays(-7)),
+                new ReminderJob(chatId, ReminderType.PreDeparture1Day, tourName, departureDate.AddDays(-1)),
+                new ReminderJob(chatId, ReminderType.DepartureDay, tourName, departureDate),
+            ]);
+        }
 
         logger.LogInformation("Scheduled 3 departure reminders for {ChatId} — {TourName} on {Date}",
             chatId, tourName, departureDate);
@@ -36,8 +41,11 @@ public sealed class SchedulerService(
 
     public void SchedulePostTripFeedback(string chatId, string tripName, DateTimeOffset returnDate)
     {
-        _jobs.Add(new ReminderJob(chatId, ReminderType.PostTripFeedback, tripName,
-            returnDate.AddHours(24)));
+        lock (_jobsLock)
+        {
+            _jobs.Add(new ReminderJob(chatId, ReminderType.PostTripFeedback, tripName,
+                returnDate.AddHours(24)));
+        }
 
         logger.LogInformation("Scheduled post-trip feedback for {ChatId} — {TripName}", chatId, tripName);
     }
@@ -45,7 +53,13 @@ public sealed class SchedulerService(
     private async Task ProcessDueJobsAsync(CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
-        var dueJobs = _jobs.Where(j => !j.Sent && j.ScheduledAt <= now).ToList();
+
+        // Snapshot under lock — avoids race with ScheduleDepartureReminders / SchedulePostTripFeedback
+        List<ReminderJob> dueJobs;
+        lock (_jobsLock)
+        {
+            dueJobs = _jobs.Where(j => !j.Sent && j.ScheduledAt <= now).ToList();
+        }
 
         foreach (var job in dueJobs)
         {

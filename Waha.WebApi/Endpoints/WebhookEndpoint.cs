@@ -1,3 +1,5 @@
+using Waha.WebApi.Queue;
+
 namespace Waha.WebApi.Endpoints;
 
 public static class WebhookEndpoint
@@ -19,7 +21,7 @@ public static class WebhookEndpoint
 
     private static async Task<IResult> HandleWebhookAsync(
         WahaWebhookPayload payload,
-        AgentChatService agentChat,
+        WhatsAppMessageQueue messageQueue,
         ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
@@ -33,20 +35,9 @@ public static class WebhookEndpoint
         if (message is null || message.FromMe || string.IsNullOrWhiteSpace(message.Body))
             return Results.Ok();
 
-        // Fire-and-forget with error isolation — webhook must return 200 quickly.
-        // Use CancellationToken.None so outbound calls aren't cancelled when the
-        // inbound HTTP request completes.
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await agentChat.HandleAsync(message.From, message.Body, CancellationToken.None).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error handling WAHA message from {From}", message.From);
-            }
-        }, CancellationToken.None);
+        // Enqueue for background processing — webhook must return 200 quickly.
+        // The queue serialises processing, provides backpressure, and respects app shutdown.
+        messageQueue.TryEnqueue(message.From, message.Body);
 
         return Results.Ok();
     }

@@ -51,9 +51,10 @@ public sealed class AgentChatService(
                     "Apologies, I'm having trouble right now 😔 Please try again in a moment, or call us at +91-98765-43210.",
                     CancellationToken.None).ConfigureAwait(false);
             }
-            catch
+            catch (Exception fallbackEx)
             {
-                // Swallow — don't let fallback errors propagate
+                // Swallow — don't let fallback errors propagate, but log for diagnostics
+                logger.LogDebug(fallbackEx, "Failed to send fallback error message to {Phone}", phoneNumber);
             }
         }
     }
