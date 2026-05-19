@@ -36,6 +36,18 @@ var webhookApi = builder.AddProject<Waha_WebApi>("webhook")
     .WaitFor(waha)
     .WaitFor(mcpServer);
 
+// ─── MCP Inspector ────────────────────────────────────────────────────────────
+// Browse and test all 18 MCP tools interactively from the Aspire Dashboard.
+// Defaults: StreamableHttp transport, path "/mcp" — both match our McpServer setup.
+// InspectorVersion: 0.17.2 (bundled default) crashes on Node.js v24 with
+// ERR_INVALID_STATE when its createWebReadableStream closes an already-closed
+// ReadableStream controller. Fixed in 0.17.5+.
+builder.AddMcpInspector("mcp-inspector", options =>
+{
+    options.InspectorVersion = "0.17.5";
+})
+    .WithMcpServer(mcpServer);
+
 // ─── Dev Tunnel ───────────────────────────────────────────────────────────────
 var _ = builder.AddDevTunnel("waha-webhook")
     .WithReference(webhookApi)

@@ -242,6 +242,39 @@ The container uses a **Persistent lifetime** in Aspire, meaning it survives `asp
 
 ---
 
+## MCP Inspector
+
+The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) is a browser-based developer tool for interactively exploring and testing the tools and resources exposed by `Waha.McpServer`. It is included automatically in the Aspire application when running locally — no separate install required.
+
+### Open the inspector
+
+1. Run `aspire start` and open the **Aspire Dashboard** link printed in the terminal
+2. Find the **mcp-inspector** resource and click its **Client** endpoint link
+3. The inspector opens in your browser at `http://localhost:6274`
+
+### Connect to the MCP server
+
+1. In the **Transport Type** dropdown, select **Streamable HTTP**
+2. The **Server URL** field will be pre-filled with the local `Waha.McpServer` endpoint (e.g. `http://localhost:<port>/mcp`)
+3. Click **Connect**, then click **Initialize**
+4. You can now browse all **18 tools** and **3 resources** — execute them with custom arguments and inspect the responses in real time
+
+### Node.js v24 compatibility note
+
+The default inspector version (`0.17.2`) crashes on Node.js v24+ with `ERR_INVALID_STATE: Controller is already closed`. The AppHost pins the inspector to `0.17.5` which includes the fix:
+
+```csharp
+// Waha.AppHost/AppHost.cs
+builder.AddMcpInspector("mcp-inspector", options =>
+{
+    options.InspectorVersion = "0.17.5";
+}).WithMcpServer(mcpServer);
+```
+
+If you upgrade the `CommunityToolkit.Aspire.Hosting.McpInspector` package in the future, verify the bundled default version is `0.17.5` or later before removing the explicit pin.
+
+---
+
 ## Configuration Reference
 
 All configuration is passed through Aspire's parameter/environment system and stored in user secrets.
@@ -277,6 +310,107 @@ Edit `Waha.WebApi/Constants/SystemPrompts.cs` — the `Aria` constant is the ful
 3. Inject any services you need through the constructor — standard DI applies
 
 No changes needed in `Waha.WebApi` — the agent discovers new tools on startup.
+
+---
+
+## Roadmap
+
+The following improvements are planned or open for contribution. Each item is tracked as a GitHub Issue — check the [Issues tab](../../issues) for the current status.
+
+### 🗄️ Persistence Layer — Azure Cosmos DB
+
+Replace the current in-memory `*Service` singletons (`TourService`, `DestinationService`, etc.) with a durable data store backed by **Azure Cosmos DB**.
+
+- Use the Aspire Cosmos DB integration for local development:
+  ```csharp
+  // Waha.AppHost/AppHost.cs
+  var cosmos = builder.AddAzureCosmosDB("cosmos").RunAsEmulator();
+  ```
+- Ref: https://aspire.dev/integrations/cloud/azure/azure-cosmos-db/azure-cosmos-db-host/#run-as-emulator
+- Persist conversation history (`AgentSessionStore`), tour catalog, bookings, and lead data
+- Enables multi-tenant data isolation and cross-restart state survival
+
+### 🧪 Unit & Integration Tests
+
+Add automated test coverage across all layers.
+
+- **Unit tests** — one xUnit project per layer (`Waha.McpServer.Tests`, `Waha.WebApi.Tests`)
+  - Mock `WahaApiClient`, `AgentChatService`, and MCP tool services
+- **Integration tests** — use Aspire's `DistributedApplicationTestingBuilder`
+  - Spin up the full AppHost in-process, send a webhook request, and assert the WhatsApp reply
+- Ref: https://learn.microsoft.com/dotnet/aspire/testing/overview
+
+### 🔐 OAuth / Authentication for MCP Server
+
+Protect the `Waha.McpServer` `/mcp` endpoint with bearer token validation so that only authorised callers (Aria agent, MCP Inspector with a token) can invoke tools.
+
+- Use ASP.NET Core JWT bearer middleware
+- Configure allowed clients in `Waha.AppHost` user secrets
+- The MCP C# SDK supports passing `Authorization` headers on the client side
+
+### 🖥️ Admin Dashboard
+
+A web UI (Blazor or React) for agency staff to:
+- View and manage incoming booking enquiries
+- Update tour catalog and availability
+- Monitor active WhatsApp conversations
+
+### 💳 Payment Gateway Integration
+
+Capture tour deposits directly in the chat flow:
+- Integrate **Razorpay** (South Asia) or **Stripe** (global) via new MCP tools
+- Generate payment links and send them over WhatsApp
+- Webhook handler to confirm payment and update booking status
+
+### 🏢 Multi-Tenant Support
+
+Allow a single deployment to serve multiple travel agencies:
+- Tenant resolution by WhatsApp number prefix or subdomain
+- Isolated Cosmos DB containers per tenant
+- Per-tenant system prompt (persona) and tour catalog
+- Aspire parameter-driven secret namespacing
+
+### ⚙️ CI/CD Pipeline
+
+GitHub Actions workflow for:
+- `dotnet build` on every PR (zero-warnings gate)
+- Unit and integration test run
+- Docker image build and push to Azure Container Registry
+- Optional: auto-deploy to Azure Container Apps on merge to `main`
+
+### 🐳 Container Deployment — Docker Compose
+
+A production-ready `docker-compose.yml` to run the full stack without Aspire:
+- `waha`, `Waha.McpServer`, `Waha.WebApi` services
+- Environment variable substitution for all secrets
+- Volume mounts for WAHA session persistence
+- Suitable for self-hosted VPS deployments
+
+### 🌐 Multi-Language / i18n
+
+Detect the customer's language from their first message and instruct Aria to reply in kind:
+- Add a language-detection step in `AgentChatService` before the Aria prompt
+- Update the system prompt to include the detected locale
+- Fallback to English for unsupported languages
+
+### 🛡️ Rate Limiting & WAHA Abuse Protection
+
+Prevent message flooding at both the API and WAHA layers:
+- **ASP.NET Core rate limiting middleware** on the `/webhook` endpoint (per-IP, sliding window)
+- **WAHA-side throttling**: WAHA Pro supports send-rate limits — configure `WAHA_SEND_RATE_LIMIT` to avoid WhatsApp bans
+- Per-phone-number cooldown in `WhatsAppMessageQueue` for repeat senders
+
+### 📊 Analytics & Reporting
+
+Track conversation quality and tour funnel metrics. Three complementary approaches:
+
+| Approach | Best for | Notes |
+|---|---|---|
+| **Azure Application Insights** (recommended) | Teams already on Azure | Zero new infra — extends the existing OpenTelemetry pipeline in `ServiceDefaults`. Add `TelemetryClient.TrackEvent("TourBooked", props)` in `AgentChatService`. Dashboards in Azure Portal / Workbooks. |
+| **Grafana + OpenTelemetry** | Open-source stack | Aspire already exports OTLP. Add a Grafana container resource in `Waha.AppHost` and route traces/metrics there — no SaaS dependency. |
+| **Custom built-in dashboard** | Full control | Store aggregated metrics in Cosmos DB (when added) and build a Blazor dashboard. Most effort, zero external dependency. |
+
+Suggested events to track: `MessageReceived`, `TourEnquiry`, `TourBooked`, `PaymentCaptured`, `AgentError`.
 
 ---
 
