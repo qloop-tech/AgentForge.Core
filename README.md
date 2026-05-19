@@ -96,20 +96,20 @@ All AI tools live in `Waha.McpServer` and are exposed over **MCP StreamableHttp*
 |---|---|---|
 | **Tour Search** | `search_tours` | Search by destination, keyword, budget, or travel month |
 | | `get_tour_details` | Full tour details — highlights, inclusions, exclusions, reviews |
-| | `check_tour_availability` | Remaining slots for a tour in a given month |
-| | `get_tour_pricing` | Detailed cost breakdown by room type (single/double/triple) |
+| | `check_availability` | Remaining slots for a tour in a given month |
+| | `get_pricing_breakdown` | Detailed cost breakdown by room type (single/double/triple) |
 | **Booking** | `create_booking_inquiry` | Register a customer booking inquiry with all details |
-| | `get_booking_inquiries` | Retrieve a customer's existing inquiries by phone number |
-| **Post-Booking** | `get_itinerary` | Day-by-day travel program |
-| | `get_pre_departure_checklist` | Documents, health prep, and day-of instructions |
+| | `get_customer_inquiries` | Retrieve a customer's existing inquiries by phone number |
+| **Post-Booking** | `get_day_by_day_itinerary` | Day-by-day travel program |
+| | `get_departure_checklist` | Documents, health prep, and day-of instructions |
 | | `submit_trip_feedback` | Collect a star rating and comment after the trip |
 | | `get_tour_reviews` | Customer reviews and average rating for a tour |
 | **Policies** | `get_cancellation_policy` | Refund tiers based on days before departure |
-| | `get_tour_inclusions` | What is and is not included in a package |
-| | `get_faq` | Frequently asked questions |
+| | `get_inclusions_exclusions` | What is and is not included in a package |
+| | `get_faq_answer` | Frequently asked questions |
 | **Destinations & Promotions** | `get_destination_guide` | Best season, weather, local attractions, cuisine |
 | | `get_visa_requirements` | Visa and travel permit info per destination |
-| | `get_packing_list` | Packing list tailored to destination and month |
+| | `get_packing_recommendations` | Packing list tailored to destination and month |
 | | `get_active_promotions` | Current active offers and discounts |
 | | `calculate_group_discount` | Group pricing based on passenger count |
 
@@ -295,9 +295,11 @@ All configuration is passed through Aspire's parameter/environment system and st
 
 Edit the JSON data files in `Waha.McpServer/Data/`:
 
-- `tours.json` — tour packages (name, destination, duration, price, tags, highlights)
-- `destinations.json` — destination guides
-- `policies.json` — cancellation tiers, group discounts, contact info
+- `TourCatalog.json` — tour packages (name, destination, duration, price, tags, highlights)
+- `DestinationGuide.json` — destination guides (best season, visa, packing, attractions)
+- `AgencyInfo.json` — cancellation tiers, group discounts, contact info
+- `FAQ.json` — frequently asked questions
+- `Promotions.json` — active promotional offers and discounts
 
 ### Change the AI persona
 

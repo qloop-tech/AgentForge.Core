@@ -46,7 +46,7 @@ public sealed class WahaApiClient(
     /// </summary>
     public async Task EnsureSessionWorkingAsync(CancellationToken ct = default)
     {
-        var response = await httpClient.GetAsync("/api/sessions/default", ct).ConfigureAwait(false);
+        using var response = await httpClient.GetAsync("/api/sessions/default", ct).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode) return;
 
         var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
@@ -60,9 +60,9 @@ public sealed class WahaApiClient(
         }
 
         logger.LogWarning("WAHA session is {Status} — starting it now", status);
-        var startResponse = await httpClient.PostAsync(
+        using var startResponse = await httpClient.PostAsync(
             "/api/sessions/default/start",
-            new StringContent("{}"),
+            new StringContent("{}", System.Text.Encoding.UTF8, "application/json"),
             ct).ConfigureAwait(false);
 
         if (startResponse.IsSuccessStatusCode)

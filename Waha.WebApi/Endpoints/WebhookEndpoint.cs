@@ -19,11 +19,10 @@ public static class WebhookEndpoint
         return app;
     }
 
-    private static async Task<IResult> HandleWebhookAsync(
+    private static IResult HandleWebhookAsync(
         WahaWebhookPayload payload,
         WhatsAppMessageQueue messageQueue,
-        ILoggerFactory loggerFactory,
-        CancellationToken ct)
+        ILoggerFactory loggerFactory)
     {
         var logger = loggerFactory.CreateLogger(nameof(WebhookEndpoint));
         logger.LogDebug("Received WAHA event: {Event} from session: {Session}", payload.Event, payload.Session);
