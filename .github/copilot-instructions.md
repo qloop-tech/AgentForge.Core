@@ -1,4 +1,4 @@
-# Copilot Instructions — Royal Journeys TravelAgencySaaS
+# Copilot Instructions — Royal Journeys WhatsApp AI Travel Agent
 
 ## Build & Run
 

@@ -1,4 +1,4 @@
-# Royal Journeys — TravelAgencySaaS
+# Royal Journeys — WhatsApp AI Travel Agent
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10-purple.svg)](https://dotnet.microsoft.com/)
@@ -126,7 +126,7 @@ All AI tools live in `Waha.McpServer` and are exposed over **MCP StreamableHttp*
 ## Project Structure
 
 ```
-TravelAgencySaaS/
+whatsapp-ai-travel-agent/
 ├── Waha.AppHost/          # .NET Aspire orchestration — defines all resources, dependencies, secrets
 ├── Waha.ServiceDefaults/  # Shared defaults — OpenTelemetry, health checks, HTTP resilience, service discovery
 ├── Waha.Hosting/          # Custom Aspire integration for the WAHA container (AddWaha extension)
@@ -164,8 +164,8 @@ TravelAgencySaaS/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/goldytech/TravelAgencySaaS.git
-cd TravelAgencySaaS
+git clone https://github.com/goldytech/whatsapp-ai-travel-agent.git
+cd whatsapp-ai-travel-agent
 ```
 
 ### 2. Configure secrets
