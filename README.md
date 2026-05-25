@@ -1,4 +1,4 @@
-# Royal Journeys — WhatsApp AI Travel Agent
+# AgentForge — Royal Journeys WhatsApp AI Travel Agent
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10-purple.svg)](https://dotnet.microsoft.com/)
@@ -36,14 +36,14 @@ flowchart TD
         WAHA["WAHA Container\nnoweb engine"]
         DT["DevTunnel\npublic HTTPS webhook"]
 
-        subgraph WebApi["Waha.WebApi  —  AI Gateway"]
+        subgraph WebApi["AgentForge.WebApi  —  AI Gateway"]
             WH["/webhook endpoint"]
             Q["WhatsAppMessageQueue\nbounded Channel&lt;T&gt;"]
             ACS["AgentChatService\nclient-managed session history"]
             WC["WahaApiClient"]
         end
 
-        subgraph MCP["Waha.McpServer  —  AI Tool Server"]
+        subgraph MCP["AgentForge.McpHost  —  AI Tool Server"]
             MT["18 MCP Tools\ntour search · booking · policies\ndestinations · promotions"]
         end
     end
@@ -71,8 +71,8 @@ flowchart TD
 3. `/webhook` endpoint enqueues the message into a bounded `Channel<T>` (backpressure-safe)
 4. `WhatsAppMessageQueue` dequeues and calls `AgentChatService`
 5. `AgentChatService` restores the customer's conversation session (in-memory, keyed by phone number)
-6. **Aria** (the `ChatClientAgent`) runs via `TravelAgentFactory` — calls MCP tools as needed
-7. `Waha.McpServer` executes the requested tools (tour search, pricing, booking inquiry, etc.)
+6. **Aria** (the `ChatClientAgent`) runs via `VerticalAgentFactory` using the active vertical descriptor — calls MCP tools as needed
+7. `AgentForge.McpHost` executes the requested tools (tour search, pricing, booking inquiry, etc.)
 8. Aria crafts a WhatsApp-friendly reply and `WahaApiClient` delivers it back via WAHA
 
 Alongside the live chat, `SchedulerService` fires departure reminders (7 days, 1 day, day-of) and post-trip feedback requests to booked customers.
@@ -95,9 +95,9 @@ Alongside the live chat, `SchedulerService` fires departure reminders (7 days, 1
 
 ---
 
-## MCP Tools (Waha.McpServer)
+## MCP Tools (AgentForge.McpHost)
 
-All AI tools live in `Waha.McpServer` and are exposed over **MCP StreamableHttp**. The AI agent discovers and calls them automatically — no tool registration needed in `Waha.WebApi`.
+`AgentForge.McpHost` is now a **generic MCP host**. The current travel tools, resources, models, services, and JSON seed data live in `src/Verticals/AgentForge.Verticals.Travel/`, and the host loads them from the active vertical plugin at runtime. The AI agent still discovers and calls them automatically — no tool registration is needed in `AgentForge.WebApi`.
 
 | Category | Tool | Description |
 |---|---|---|
@@ -132,23 +132,25 @@ All AI tools live in `Waha.McpServer` and are exposed over **MCP StreamableHttp*
 
 ## Project Structure
 
-```
+```text
 whatsapp-ai-travel-agent/
-├── Waha.AppHost/          # .NET Aspire orchestration — defines all resources, dependencies, secrets
-├── Waha.ServiceDefaults/  # Shared defaults — OpenTelemetry, health checks, HTTP resilience, service discovery
-├── Waha.Hosting/          # Custom Aspire integration for the WAHA container (AddWaha extension)
-├── Waha.McpServer/        # MCP tool server — 18 AI tools, 3 resources, in-memory data services
-│   ├── Tools/             #   TourSearchTools, BookingInquiryTools, PostBookingTools, PolicyTools, DestinationTools, PromotionTools
-│   ├── Resources/         #   TravelResources (MCP resources)
-│   ├── Services/          #   TourCatalogService, BookingInquiryService, DestinationService, PromotionService, PolicyService
-│   └── Data/              #   JSON seed data (tour catalog, destinations, policies)
-└── Waha.WebApi/           # AI gateway — receives webhooks, runs the Aria agent, sends WhatsApp replies
-    ├── Endpoints/         #   WebhookEndpoint (/webhook)
-    ├── Services/          #   AgentChatService, TravelAgentFactory, WahaApiClient, WebhookRegistrationService, McpClientProvider
-    ├── Queue/             #   WhatsAppMessageQueue (bounded Channel<T> background service)
-    ├── Scheduling/        #   SchedulerService (departure reminders, post-trip feedback)
-    ├── Handlers/          #   TravelBotHandler (scheduled notifications), FeedbackHandler
-    └── Constants/         #   SystemPrompts.Aria (the agent's persona and instructions)
+├── AgentForge.slnx
+├── src/
+│   ├── AgentForge.AppHost/          # .NET Aspire orchestration — defines all resources, dependencies, secrets
+│   ├── AgentForge.ServiceDefaults/  # Shared defaults — OpenTelemetry, health checks, HTTP resilience, service discovery
+│   ├── AgentForge.Hosting/          # Custom Aspire integration for the WAHA container (AddWaha extension)
+│   ├── AgentForge.Verticals.Abstractions/ # Shared contracts for vertical metadata, messaging, and scheduled actions
+│   ├── AgentForge.Verticals.Hosting/ # Shared loader boundary used by both hosts to resolve the active vertical
+│   ├── AgentForge.McpHost/          # Generic MCP host — loads tools/resources from the active vertical plugin
+│   ├── AgentForge.WebApi/           # AI gateway — receives webhooks, runs the Aria agent, sends WhatsApp replies
+│   │   ├── Endpoints/               #   WebhookEndpoint (/webhook), PreviewEndpoint (/preview)
+│   │   ├── Services/                #   AgentChatService, VerticalAgentFactory, WahaApiClient, WebhookRegistrationService, McpClientProvider
+│   │   ├── Queue/                   #   WhatsAppMessageQueue (bounded Channel<T> background service)
+│   │   └── Scheduling/              #   SchedulerService (generic scheduled action dispatcher)
+│   └── Verticals/
+│       └── AgentForge.Verticals.Travel/ # Travel plugin: descriptor, tools, resources, services, data, scheduled actions
+├── tests/                           # Reserved for upcoming test projects
+└── artifacts/                       # Reserved for build and plugin outputs
 ```
 
 ---
@@ -181,7 +183,7 @@ All sensitive values are stored in .NET user secrets (never committed to source 
 
 ```bash
 # Set WAHA credentials (choose your own values)
-cd Waha.AppHost
+cd src/AgentForge.AppHost
 dotnet user-secrets set "Parameters:wahaApiKey"            "your-api-key"
 dotnet user-secrets set "Parameters:wahaDashboardPassword" "your-dashboard-password"
 dotnet user-secrets set "Parameters:wahaSwaggerPassword"   "your-swagger-password"
@@ -207,7 +209,7 @@ aspire start
 
 Aspire will:
 - Pull and start the WAHA Docker container (first run downloads ~500 MB)
-- Start `Waha.McpServer` and `Waha.WebApi`
+- Start `AgentForge.McpHost` and `AgentForge.WebApi`
 - Create a DevTunnel and register the webhook URL with WAHA automatically
 
 Open the Aspire Dashboard link printed in the terminal to monitor all services.
@@ -251,7 +253,7 @@ The container uses a **Persistent lifetime** in Aspire, meaning it survives `asp
 
 ## MCP Inspector
 
-The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) is a browser-based developer tool for interactively exploring and testing the tools and resources exposed by `Waha.McpServer`. It is included automatically in the Aspire application when running locally — no separate install required.
+The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) is a browser-based developer tool for interactively exploring and testing the tools and resources exposed by `AgentForge.McpHost`. It is included automatically in the Aspire application when running locally — no separate install required.
 
 ### Open the inspector
 
@@ -262,7 +264,7 @@ The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) is a brow
 ### Connect to the MCP server
 
 1. In the **Transport Type** dropdown, select **Streamable HTTP**
-2. The **Server URL** field will be pre-filled with the local `Waha.McpServer` endpoint (e.g. `http://localhost:<port>/mcp`)
+2. The **Server URL** field will be pre-filled with the local `AgentForge.McpHost` endpoint (e.g. `http://localhost:<port>/mcp`)
 3. Click **Connect**, then click **Initialize**
 4. You can now browse all **18 tools** and **3 resources** — execute them with custom arguments and inspect the responses in real time
 
@@ -271,7 +273,7 @@ The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) is a brow
 The default inspector version (`0.17.2`) crashes on Node.js v24+ with `ERR_INVALID_STATE: Controller is already closed`. The AppHost pins the inspector to `0.17.5` which includes the fix:
 
 ```csharp
-// Waha.AppHost/AppHost.cs
+// AgentForge.AppHost/AppHost.cs
 builder.AddMcpInspector("mcp-inspector", options =>
 {
     options.InspectorVersion = "0.17.5";
@@ -288,12 +290,16 @@ All configuration is passed through Aspire's parameter/environment system and st
 
 | Secret / Env Var | Where set | Description |
 |---|---|---|
-| `Parameters:wahaApiKey` | `Waha.AppHost` user secrets | API key protecting the WAHA REST endpoints |
-| `Parameters:wahaDashboardPassword` | `Waha.AppHost` user secrets | WAHA Dashboard login password |
-| `Parameters:wahaSwaggerPassword` | `Waha.AppHost` user secrets | WAHA Swagger UI login password |
-| `ConnectionStrings:ai-foundry` | `Waha.AppHost` user secrets | Azure AI Foundry connection string (`Endpoint=...;Key=...`) |
-| `WahaTier` | `Waha.AppHost` user secrets | `Core` (default, free) or `Plus` (paid, enables native image/file/voice sending) |
-| `WEBHOOK_BASE_URL` | Optional env var on `Waha.WebApi` | Override the webhook URL if not using DevTunnel |
+| `Parameters:wahaApiKey` | `AgentForge.AppHost` user secrets | API key protecting the WAHA REST endpoints |
+| `Parameters:wahaDashboardPassword` | `AgentForge.AppHost` user secrets | WAHA Dashboard login password |
+| `Parameters:wahaSwaggerPassword` | `AgentForge.AppHost` user secrets | WAHA Swagger UI login password |
+| `ConnectionStrings:ai-foundry` | `AgentForge.AppHost` user secrets | Azure AI Foundry connection string (`Endpoint=...;Key=...`) |
+| `WahaTier` | `AgentForge.AppHost` user secrets | `Core` (default, free) or `Plus` (paid, enables native image/file/voice sending) |
+| `WEBHOOK_BASE_URL` | Optional env var on `AgentForge.WebApi` | Override the webhook URL if not using DevTunnel |
+| `VERTICAL_ID` | Optional env var on `AgentForge.AppHost` | Active vertical ID for Compose publishing and runtime selection (`travel` by default) |
+| `VERTICAL_PLUGIN_ROOT` | Optional env var on `AgentForge.AppHost` | Container-side root path mounted into `AgentForge.WebApi` and `AgentForge.McpHost` during Compose publish (`/app/plugins` by default) |
+| `VERTICAL_PLUGIN_SOURCE_PATH` | Optional env var on `AgentForge.AppHost` | Host-side plugin folder to bind-mount during Compose publish (defaults to `../../artifacts/plugins/{VERTICAL_ID}` relative to `src/AgentForge.AppHost/`) |
+| `VERTICAL_PLUGIN_PATH` | Optional env var on `AgentForge.WebApi` / `AgentForge.McpHost` | Path to an external published vertical plugin folder or DLL; when unset, the in-tree travel plugin is used |
 
 ---
 
@@ -330,7 +336,7 @@ docker pull devlikeapro/waha-plus:noweb
 **4. Set the tier in Aspire user secrets**
 
 ```bash
-cd Waha.AppHost
+cd AgentForge.AppHost
 dotnet user-secrets set "WahaTier" "Plus"
 ```
 
@@ -363,7 +369,7 @@ Aspire will now pull and start `devlikeapro/waha-plus:noweb` instead of the free
 
 ### Replace the tour catalog
 
-Edit the JSON data files in `Waha.McpServer/Data/`:
+Edit the JSON data files in `src/Verticals/AgentForge.Verticals.Travel/Data/`:
 
 - `TourCatalog.json` — tour packages (name, destination, duration, price, tags, highlights)
 - `DestinationGuide.json` — destination guides (best season, visa, packing, attractions)
@@ -373,15 +379,15 @@ Edit the JSON data files in `Waha.McpServer/Data/`:
 
 ### Change the AI persona
 
-Edit `Waha.WebApi/Constants/SystemPrompts.cs` — the `Aria` constant is the full system prompt. Rename the agent, adjust the personality, and update the upsell/lead-capture instructions to match your agency.
+Edit `src/Verticals/AgentForge.Verticals.Travel/TravelVerticalDescriptor.cs` — it now holds the travel vertical's agent metadata, system prompt, preview defaults, and asset prefix in one place.
 
 ### Add new MCP tools
 
-1. Create a new `*Tools.cs` class in `Waha.McpServer/Tools/` decorated with `[McpServerToolType]`
+1. Create a new `*Tools.cs` class in `src/Verticals/AgentForge.Verticals.Travel/Tools/` decorated with `[McpServerToolType]`
 2. Add `[McpServerTool]` methods — they are auto-registered via `WithToolsFromAssembly`
 3. Inject any services you need through the constructor — standard DI applies
 
-No changes needed in `Waha.WebApi` — the agent discovers new tools on startup.
+No changes needed in `AgentForge.WebApi` — the agent discovers new tools on startup.
 
 ---
 
@@ -395,7 +401,7 @@ Replace the current in-memory `*Service` singletons (`TourService`, `Destination
 
 - Use the Aspire Cosmos DB integration for local development:
   ```csharp
-  // Waha.AppHost/AppHost.cs
+  // AgentForge.AppHost/AppHost.cs
   var cosmos = builder.AddAzureCosmosDB("cosmos").RunAsEmulator();
   ```
 - Ref: https://aspire.dev/integrations/cloud/azure/azure-cosmos-db/azure-cosmos-db-host/#run-as-emulator
@@ -406,7 +412,7 @@ Replace the current in-memory `*Service` singletons (`TourService`, `Destination
 
 Add automated test coverage across all layers.
 
-- **Unit tests** — one xUnit project per layer (`Waha.McpServer.Tests`, `Waha.WebApi.Tests`)
+- **Unit tests** — one xUnit project per layer (`AgentForge.McpHost.Tests`, `AgentForge.WebApi.Tests`)
   - Mock `WahaApiClient`, `AgentChatService`, and MCP tool services
 - **Integration tests** — use Aspire's `DistributedApplicationTestingBuilder`
   - Spin up the full AppHost in-process, send a webhook request, and assert the WhatsApp reply
@@ -414,10 +420,10 @@ Add automated test coverage across all layers.
 
 ### 🔐 OAuth / Authentication for MCP Server
 
-Protect the `Waha.McpServer` `/mcp` endpoint with bearer token validation so that only authorised callers (Aria agent, MCP Inspector with a token) can invoke tools.
+Protect the `AgentForge.McpHost` `/mcp` endpoint with bearer token validation so that only authorised callers (Aria agent, MCP Inspector with a token) can invoke tools.
 
 - Use ASP.NET Core JWT bearer middleware
-- Configure allowed clients in `Waha.AppHost` user secrets
+- Configure allowed clients in `AgentForge.AppHost` user secrets
 - The MCP C# SDK supports passing `Authorization` headers on the client side
 
 ### 🖥️ Admin Dashboard
@@ -450,13 +456,41 @@ GitHub Actions workflow for:
 - Docker image build and push to Azure Container Registry
 - Optional: auto-deploy to Azure Container Apps on merge to `main`
 
-### 🐳 Container Deployment — Docker Compose
+### 🐳 Container Deployment — Aspire-generated Docker Compose
 
-A production-ready `docker-compose.yml` to run the full stack without Aspire:
-- `waha`, `Waha.McpServer`, `Waha.WebApi` services
-- Environment variable substitution for all secrets
-- Volume mounts for WAHA session persistence
-- Suitable for self-hosted VPS deployments
+The repository now supports **Aspire-generated Docker Compose** for VPS/self-hosted deployments.
+
+#### Publish the travel plugin
+
+```bash
+dotnet publish src/Verticals/AgentForge.Verticals.Travel/AgentForge.Verticals.Travel.csproj
+```
+
+By default this writes the runtime-loadable travel plugin to:
+
+```text
+artifacts/plugins/travel/
+```
+
+#### Generate the Compose artifacts
+
+```bash
+aspire publish --apphost src/AgentForge.AppHost/AgentForge.AppHost.csproj -o artifacts/aspire-output
+```
+
+This generates:
+
+- `artifacts/aspire-output/docker-compose.yaml`
+- a Compose model containing `waha`, `mcpserver`, and `webhook`
+- a persistent `waha-sessions` Docker volume
+- bind mounts that project `artifacts/plugins/travel` into both app services at `/app/plugins/travel`
+
+#### Deployment notes
+
+- `AgentForge.WebApi` and `AgentForge.McpHost` receive `VERTICAL_ID`, `VERTICAL_PLUGIN_ROOT`, and `VERTICAL_PLUGIN_PATH` automatically in publish mode.
+- `DevTunnel` and `MCP Inspector` are intentionally **local-only** and are not included in published Compose output.
+- The generated Compose file still expects environment variables for image names and secrets such as `WEBHOOK_IMAGE`, `MCPSERVER_IMAGE`, `AI_FOUNDRY`, `WAHAAPIKEY`, `WAHADASHBOARDPASSWORD`, and `WAHASWAGGERPASSWORD`.
+- To publish a different vertical later, publish that plugin to `artifacts/plugins/<vertical-id>/` and set `VERTICAL_ID` (and optionally `VERTICAL_PLUGIN_SOURCE_PATH`) before running `aspire publish`.
 
 ### 🌐 Multi-Language / i18n
 
@@ -479,7 +513,7 @@ Track conversation quality and tour funnel metrics. Three complementary approach
 | Approach | Best for | Notes |
 |---|---|---|
 | **Azure Application Insights** (recommended) | Teams already on Azure | Zero new infra — extends the existing OpenTelemetry pipeline in `ServiceDefaults`. Add `TelemetryClient.TrackEvent("TourBooked", props)` in `AgentChatService`. Dashboards in Azure Portal / Workbooks. |
-| **Grafana + OpenTelemetry** | Open-source stack | Aspire already exports OTLP. Add a Grafana container resource in `Waha.AppHost` and route traces/metrics there — no SaaS dependency. |
+| **Grafana + OpenTelemetry** | Open-source stack | Aspire already exports OTLP. Add a Grafana container resource in `AgentForge.AppHost` and route traces/metrics there — no SaaS dependency. |
 | **Custom built-in dashboard** | Full control | Store aggregated metrics in Cosmos DB (when added) and build a Blazor dashboard. Most effort, zero external dependency. |
 
 Suggested events to track: `MessageReceived`, `TourEnquiry`, `TourBooked`, `PaymentCaptured`, `AgentError`.
