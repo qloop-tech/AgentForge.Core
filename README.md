@@ -83,7 +83,7 @@ Alongside the live chat, `SchedulerService` fires departure reminders (7 days, 1
 
 | Layer | Technology | Purpose |
 |---|---|---|
-| **Runtime** | .NET 10 / C# 13 | All projects |
+| **Runtime** | .NET 10 / C# 14 | All projects |
 | **Orchestration** | [.NET Aspire 13.3](https://learn.microsoft.com/en-us/dotnet/aspire/) | Service discovery, health checks, OpenTelemetry, DevTunnel, secrets |
 | **WhatsApp Gateway** | [WAHA](https://waha.devlike.pro/) (`devlikeapro/waha:noweb`) | Self-hosted WhatsApp HTTP API — no WhatsApp Business API fees |
 | **AI Agent Runtime** | [Microsoft Agents Framework 1.5](https://github.com/microsoft/agents) | `ChatClientAgent`, `AgentSession`, client-managed conversation history |
@@ -292,7 +292,70 @@ All configuration is passed through Aspire's parameter/environment system and st
 | `Parameters:wahaDashboardPassword` | `Waha.AppHost` user secrets | WAHA Dashboard login password |
 | `Parameters:wahaSwaggerPassword` | `Waha.AppHost` user secrets | WAHA Swagger UI login password |
 | `ConnectionStrings:ai-foundry` | `Waha.AppHost` user secrets | Azure AI Foundry connection string (`Endpoint=...;Key=...`) |
+| `WahaTier` | `Waha.AppHost` user secrets | `Core` (default, free) or `Plus` (paid, enables native image/file/voice sending) |
 | `WEBHOOK_BASE_URL` | Optional env var on `Waha.WebApi` | Override the webhook URL if not using DevTunnel |
+
+---
+
+## WAHA Plus (Optional — Enables Native Image Sending)
+
+By default the project runs on **WAHA Core** (free, `devlikeapro/waha:noweb`). Image messages fall back to a WhatsApp link-preview card — the URL is sent as text and WhatsApp renders a native preview.
+
+To unlock **native image sending** (and file, voice, video support), upgrade to **WAHA Plus** ($19/month). No code changes are needed — the `IWahaSendService` strategy pattern switches implementations automatically based on the `WahaTier` config value.
+
+### Steps to enable WAHA Plus
+
+**1. Subscribe and obtain your Patron key**
+
+Go to [https://portal.devlike.pro](https://portal.devlike.pro), subscribe to the Plus plan, and copy your **Patron key** from the dashboard.
+
+**2. Authenticate with the WAHA private registry**
+
+```bash
+docker login -u devlikeapro -p <YOUR_PATRON_KEY>
+```
+
+This saves credentials to `~/.docker/config.json` — Docker Desktop will use them automatically.
+
+**3. Pull the WAHA Plus image**
+
+```bash
+# Apple Silicon (ARM64)
+docker pull devlikeapro/waha-plus:noweb-arm
+
+# Intel / AMD64
+docker pull devlikeapro/waha-plus:noweb
+```
+
+**4. Set the tier in Aspire user secrets**
+
+```bash
+cd Waha.AppHost
+dotnet user-secrets set "WahaTier" "Plus"
+```
+
+**5. Restart the application**
+
+```bash
+aspire start
+```
+
+Aspire will now pull and start `devlikeapro/waha-plus:noweb` instead of the free image, and `PlusWahaSendService` will handle all message sending with native Plus APIs.
+
+### Core vs Plus feature comparison
+
+| Feature | Core (free) | Plus ($19/mo) |
+|---|---|---|
+| `sendText` | ✅ | ✅ |
+| `sendText` with link preview | ✅ | ✅ |
+| `sendImage` | ❌ (link-preview fallback) | ✅ |
+| `sendFile` | ❌ | ✅ |
+| `sendVoice` | ❌ | ✅ |
+| `sendVideo` | ❌ | ✅ |
+| `sendList` / `sendButtons` | ❌ (text fallback) | ✅ (WEBJS/WPP only, not NOWEB) |
+| NOWEB engine (no Chrome) | ✅ | ✅ |
+
+> **Note:** `sendList` and `sendButtons` require the WEBJS or WPP engine even in Plus. This project uses NOWEB for its low memory footprint (~50 MB vs ~250 MB for Chromium-based engines) and stability. Interactive menus are rendered as numbered emoji text lists, which works well for the travel agent UX.
 
 ---
 
@@ -433,7 +496,7 @@ Contributions are welcome! Please follow these steps:
    git checkout -b feat/<issue-number>-short-description
    ```
 3. Make your changes following the existing code style:
-   - C# 13 features where appropriate (`System.Threading.Lock`, collection expressions, etc.)
+   - C# 14 features where appropriate (`field`-backed properties, extension members, `System.Threading.Lock`, collection expressions, etc.)
    - Primary constructors for services
    - `ConfigureAwait(false)` on all `await` calls in library/service code
    - No `#pragma warning disable` — fix the root cause instead

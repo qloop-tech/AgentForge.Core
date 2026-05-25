@@ -1,6 +1,7 @@
 using Waha.WebApi.Endpoints;
 using Waha.WebApi.Queue;
 using Waha.WebApi.Scheduling;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,7 +29,28 @@ builder.Services.AddHttpClient("mcpserver", client =>
 builder.AddAzureChatCompletionsClient(connectionName: "ai-foundry")
     .AddChatClient("gpt-5.4-mini");
 
-// ─── AI Agent Services ────────────────────────────────────────────────────────
+// ─── WAHA Send Service (tier-aware strategy pattern) ─────────────────────────
+// CoreWahaSendService — free tier: sendImage falls back to text with linkPreview,
+//   sendList/sendButtons formatted as numbered text.
+// PlusWahaSendService — paid tier: sendImage uses native /api/sendImage;
+//   sendList/sendButtons attempt native APIs with text fallback on engine error.
+// Active implementation is selected based on WAHA_TIER env var (propagated from AppHost).
+builder.Services.AddKeyedSingleton<IWahaSendService, CoreWahaSendService>("Core");
+builder.Services.AddSingleton<CoreWahaSendService>(); // needed by PlusWahaSendService as fallback
+builder.Services.AddKeyedSingleton<IWahaSendService, PlusWahaSendService>("Plus");
+builder.Services.AddSingleton<IWahaSendService>(sp =>
+{
+    var tierStr = (builder.Configuration["WAHA_TIER"] ?? string.Empty).Trim();
+    var key = tierStr.Equals("Plus", StringComparison.OrdinalIgnoreCase) ? "Plus" : "Core";
+    if (!string.IsNullOrEmpty(tierStr) && !key.Equals(tierStr, StringComparison.OrdinalIgnoreCase))
+    {
+        sp.GetRequiredService<ILoggerFactory>()
+          .CreateLogger("WahaConfig")
+          .LogWarning("Unknown WAHA_TIER value '{Tier}' — defaulting to Core", tierStr);
+    }
+    return sp.GetRequiredKeyedService<IWahaSendService>(key);
+});
+
 builder.Services.AddSingleton<McpClientProvider>();
 builder.Services.AddSingleton<AgentSessionStore>();
 builder.Services.AddSingleton<TravelAgentFactory>();
@@ -51,10 +73,25 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
 });
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    // Forward only XForwardedProto so Kestrel reports https when behind DevTunnel.
+    // XForwardedHost is intentionally omitted — PreviewEndpoint uses WEBHOOK_BASE_URL as the
+    // authoritative public host, so a spoofed X-Forwarded-Host header has no effect.
+    // KnownIPNetworks/KnownProxies are cleared because Azure DevTunnel uses dynamic IPs.
+    // ForwardLimit = 1 prevents header-peeling attacks by accepting exactly one proxy hop.
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+    options.ForwardLimit = 1;
+});
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
 app.MapDefaultEndpoints();
+app.MapStaticAssets();
 app.MapWebhookEndpoints();
+app.MapPreviewEndpoint();
 
 app.Run();

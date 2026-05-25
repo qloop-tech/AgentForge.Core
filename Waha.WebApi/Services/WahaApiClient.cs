@@ -6,9 +6,9 @@ public sealed class WahaApiClient(
 {
     // ─── Messaging ───────────────────────────────────────────────────────────
 
-    public async Task SendTextAsync(string chatId, string text, CancellationToken ct = default)
+    public async Task SendTextAsync(string chatId, string text, bool? linkPreview = null, CancellationToken ct = default)
     {
-        var request = new SendTextRequest(chatId, text);
+        var request = new SendTextRequest(chatId, text, linkPreview);
         await PostAsync("/api/sendText", request, ct).ConfigureAwait(false);
     }
 
@@ -22,13 +22,13 @@ public sealed class WahaApiClient(
         string buttonText, ListSection[] sections, CancellationToken ct = default)
     {
         var request = new SendListRequest(chatId, title, body, footer, buttonText, sections);
-        await PostAsync("/api/sendList", request, ct).ConfigureAwait(false);
+        await PostAsync("/api/sendList", request, ct, throwOnNonSuccess: true).ConfigureAwait(false);
     }
 
     public async Task SendButtonsAsync(string chatId, string body, ButtonItem[] buttons, CancellationToken ct = default)
     {
         var request = new SendButtonsRequest(chatId, body, buttons);
-        await PostAsync("/api/sendButtons", request, ct).ConfigureAwait(false);
+        await PostAsync("/api/sendButtons", request, ct, throwOnNonSuccess: true).ConfigureAwait(false);
     }
 
     public async Task SendPollAsync(string chatId, string question, string[] options, CancellationToken ct = default)
@@ -107,7 +107,7 @@ public sealed class WahaApiClient(
 
     // ─── Private Helpers ─────────────────────────────────────────────────────
 
-    private async Task PostAsync<T>(string path, T payload, CancellationToken ct)
+    private async Task PostAsync<T>(string path, T payload, CancellationToken ct, bool throwOnNonSuccess = false)
     {
         var response = await httpClient.PostAsync(path, JsonContent.Create(payload), ct).ConfigureAwait(false);
 
@@ -115,6 +115,8 @@ public sealed class WahaApiClient(
         {
             var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             logger.LogWarning("WAHA API {Path} returned {Status}: {Body}", path, response.StatusCode, body);
+            if (throwOnNonSuccess)
+                response.EnsureSuccessStatusCode();
         }
     }
 }
