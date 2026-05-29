@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AgentForge.Verticals.Abstractions;
@@ -37,11 +38,17 @@ public interface IVerticalMcpRegistrar
 
 public interface IVerticalPlugin
 {
-    IVerticalDescriptor Descriptor { get; }
-
     IVerticalMcpRegistrar McpRegistrar { get; }
 
+    void ConfigureConfiguration(IConfigurationManager configuration);
+
+    void RegisterCommonServices(IServiceCollection services);
+
     void RegisterWebApiServices(IServiceCollection services);
+
+    IVerticalDescriptor CreateDescriptor(IServiceProvider serviceProvider);
+
+    string ResolveMcpServerName(IConfiguration configuration);
 }
 
 public interface IVerticalPluginLoader

@@ -11,12 +11,13 @@ var verticalPluginLoader = VerticalPluginLoaderFactory.Create(
     builder.Configuration["VERTICAL_PLUGIN_ROOT"],
     builder.Configuration["VERTICAL_ID"]);
 var verticalPlugin = verticalPluginLoader.Load();
+verticalPlugin.ConfigureConfiguration(builder.Configuration);
 
 builder.AddServiceDefaults();
 builder.Services.AddSingleton<IVerticalPluginLoader>(verticalPluginLoader);
 builder.Services.AddSingleton<IVerticalPlugin>(verticalPlugin);
-builder.Services.AddSingleton(verticalPlugin.Descriptor);
-builder.Services.AddSingleton<IVerticalDescriptor>(sp => sp.GetRequiredService<IVerticalPlugin>().Descriptor);
+builder.Services.AddSingleton<IVerticalDescriptor>(sp => sp.GetRequiredService<IVerticalPlugin>().CreateDescriptor(sp));
+verticalPlugin.RegisterCommonServices(builder.Services);
 builder.Services
     .AddOptions<WahaWebhookSecurityOptions>()
     .Configure(options => options.Secret = builder.Configuration["WAHA_WEBHOOK_SECRET"] ?? string.Empty)
@@ -105,6 +106,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 var app = builder.Build();
+_ = app.Services.GetRequiredService<IVerticalDescriptor>();
 
 app.UseForwardedHeaders();
 app.MapDefaultEndpoints();

@@ -167,7 +167,7 @@ whatsapp-ai-travel-agent/
 │   │   ├── Queue/                   #   WhatsAppMessageQueue (bounded Channel<T> background service)
 │   │   └── Scheduling/              #   SchedulerService (generic scheduled action dispatcher)
 │   └── Verticals/
-│       └── AgentForge.Verticals.Travel/ # Travel plugin: descriptor, tools, resources, services, data, scheduled actions
+│       └── AgentForge.Verticals.Travel/ # Travel plugin: config pack, prompt, tools, resources, services, data, scheduled actions
 ├── tests/                           # Reserved for upcoming test projects
 └── artifacts/                       # Reserved for build and plugin outputs
 ```
@@ -190,7 +190,7 @@ This repository is now structured so the **host runtime stays generic** while ea
 
 Each vertical can own:
 
-- prompts and branding
+- runtime config packs, prompts, and branding
 - MCP tools and MCP resources
 - domain services/models
 - industry seed data
@@ -201,9 +201,9 @@ Each vertical can own:
 
 At a high level, a vertical plugs in by implementing:
 
-- `IVerticalDescriptor` — display name, agent name/description, system prompt, preview defaults, asset prefix
+- `IVerticalDescriptor` — runtime-composed display name, agent metadata, system prompt, preview defaults, asset prefix
 - `IVerticalMcpRegistrar` — which assembly contains the vertical's MCP tools/resources and which services to register for MCP
-- `IVerticalPlugin` — descriptor + registrar + WebApi service registration
+- `IVerticalPlugin` — configuration sources, common services, runtime descriptor creation, MCP registrar, and WebApi service registration
 - `IScheduledActionHandler` — industry-specific reminder/follow-up behavior
 
 ### Runtime selection model
@@ -371,7 +371,9 @@ If you upgrade the `CommunityToolkit.Aspire.Hosting.McpInspector` package in the
 
 ## Configuration Reference
 
-All configuration is passed through Aspire's parameter/environment system and stored in user secrets.
+Secrets stay in AppHost user secrets. Customer-facing branding, prompt text, and business-profile settings can be layered from a mounted config folder without recompiling the travel plugin.
+
+Aspire parameters are used for **promptable runtime inputs**. Graph-shaping AppHost values stay as ordinary configuration so the resource graph can be built deterministically before the dashboard starts.
 
 | Secret / Env Var | Where set | Description |
 |---|---|---|
@@ -380,12 +382,43 @@ All configuration is passed through Aspire's parameter/environment system and st
 | `Parameters:wahaSwaggerPassword` | `AgentForge.AppHost` user secrets | WAHA Swagger UI login password |
 | `Parameters:wahaWebhookSecret` | `AgentForge.AppHost` user secrets | Shared secret used by WAHA to HMAC-sign webhook POST bodies |
 | `ConnectionStrings:ai-foundry` | `AgentForge.AppHost` user secrets | Azure AI Foundry connection string (`Endpoint=...;Key=...`) |
-| `WahaTier` | `AgentForge.AppHost` user secrets | `Core` (default, free) or `Plus` (paid, enables native image/file/voice sending) |
+| `WahaTier` | `AgentForge.AppHost` user secrets | `Core` (default, free) or `Plus` (paid, enables native image/file/voice sending); kept as AppHost config because it also selects the WAHA container tier/image |
 | `WEBHOOK_BASE_URL` | Optional env var on `AgentForge.WebApi` | Override the webhook URL if not using DevTunnel |
 | `VERTICAL_ID` | Optional env var on `AgentForge.AppHost` | Active vertical ID for Compose publishing and runtime selection (`travel` by default) |
 | `VERTICAL_PLUGIN_ROOT` | Optional env var on `AgentForge.AppHost` | Container-side root path mounted into `AgentForge.WebApi` and `AgentForge.McpHost` during Compose publish (`/app/plugins` by default) |
 | `VERTICAL_PLUGIN_SOURCE_PATH` | Optional env var on `AgentForge.AppHost` | Host-side plugin folder to bind-mount during Compose publish (defaults to `../../artifacts/plugins/{VERTICAL_ID}` relative to `src/AgentForge.AppHost/`) |
+| `CUSTOMER_CONFIG_SOURCE_PATH` | Optional env var on `AgentForge.AppHost` | Host-side customer config folder to bind-mount during Compose publish; when set, the AppHost also passes `CUSTOMER_CONFIG_PATH` into both hosts |
+| `CUSTOMER_CONFIG_PATH` | Optional env var on `AgentForge.WebApi` / `AgentForge.McpHost` | Path to a customer config folder containing `customer-profile.json` and optionally `prompt.md`; when unset, the travel plugin falls back to its bundled defaults |
 | `VERTICAL_PLUGIN_PATH` | Optional env var on `AgentForge.WebApi` / `AgentForge.McpHost` | Path to an external published vertical plugin folder or DLL; when unset, the in-tree travel plugin is used |
+
+### Dashboard-prompted local inputs
+
+When you run `aspire start` locally, the AppHost exposes these as Aspire parameters so the dashboard can prompt for them if they are missing:
+
+- `VERTICAL_PLUGIN_PATH` — local path to an external plugin folder or DLL for `AgentForge.WebApi` and `AgentForge.McpHost`
+- `CUSTOMER_CONFIG_PATH` — local path to a customer config folder for `AgentForge.WebApi` and `AgentForge.McpHost`
+
+These are **runtime inputs**, so they are safe to prompt in the dashboard. In contrast, values like `VERTICAL_ID`, `VERTICAL_PLUGIN_SOURCE_PATH`, `CUSTOMER_CONFIG_SOURCE_PATH`, and `WahaTier` still shape the AppHost graph or publish output, so they remain standard AppHost configuration rather than dashboard-entered parameters.
+
+### Customer config pack layout
+
+The bundled travel defaults now live under:
+
+```text
+src/Verticals/AgentForge.Verticals.Travel/Configuration/
+├── customer-profile.json
+└── prompt.md
+```
+
+To onboard a customer without recompiling, mount a folder with the same shape and point `CUSTOMER_CONFIG_PATH` at it:
+
+```text
+customer-config/
+├── customer-profile.json
+└── prompt.md   # optional override; falls back to the bundled prompt if omitted
+```
+
+`customer-profile.json` is bound through the .NET Options pattern, so branding, MCP server name, preview text, lead-capture fields, capabilities, business hours, and handoff rules are strongly typed and validated on startup.
 
 ---
 
@@ -465,7 +498,12 @@ Edit the JSON data files in `src/Verticals/AgentForge.Verticals.Travel/Data/`:
 
 ### Change the AI persona
 
-Edit `src/Verticals/AgentForge.Verticals.Travel/TravelVerticalDescriptor.cs` — it now holds the travel vertical's agent metadata, system prompt, preview defaults, and asset prefix in one place.
+Edit the bundled config pack in `src/Verticals/AgentForge.Verticals.Travel/Configuration/`:
+
+- `customer-profile.json` — display name, agent metadata, MCP server name, preview defaults, lead-capture fields, capabilities, business hours, handoff rules
+- `prompt.md` — the long-form travel system prompt template
+
+For customer onboarding, prefer an external folder plus `CUSTOMER_CONFIG_PATH` so you do not need to recompile the plugin.
 
 ### Add new MCP tools
 
@@ -570,13 +608,16 @@ This generates:
 - a Compose model containing `waha`, `mcpserver`, and `webhook`
 - a persistent `waha-sessions` Docker volume
 - bind mounts that project `artifacts/plugins/travel` into both app services at `/app/plugins/travel`
+- optional read-only customer-config bind mounts when `CUSTOMER_CONFIG_SOURCE_PATH` is set
 
 #### Deployment notes
 
 - `AgentForge.WebApi` and `AgentForge.McpHost` receive `VERTICAL_ID`, `VERTICAL_PLUGIN_ROOT`, and `VERTICAL_PLUGIN_PATH` automatically in publish mode.
+- If `CUSTOMER_CONFIG_SOURCE_PATH` is set on the AppHost, both hosts also receive `CUSTOMER_CONFIG_PATH` and the mounted folder is available read-only for runtime descriptor overrides.
+- During local `aspire start`, missing `VERTICAL_PLUGIN_PATH` and `CUSTOMER_CONFIG_PATH` are surfaced as unresolved Aspire parameters so the dashboard can collect them before `webhook` and `mcpserver` start.
 - `DevTunnel` and `MCP Inspector` are intentionally **local-only** and are not included in published Compose output.
 - The generated Compose file still expects environment variables for image names and secrets such as `WEBHOOK_IMAGE`, `MCPSERVER_IMAGE`, `AI_FOUNDRY`, `WAHAAPIKEY`, `WAHADASHBOARDPASSWORD`, and `WAHASWAGGERPASSWORD`.
-- To publish a different vertical later, publish that plugin to `artifacts/plugins/<vertical-id>/` and set `VERTICAL_ID` (and optionally `VERTICAL_PLUGIN_SOURCE_PATH`) before running `aspire publish`.
+- To publish a different vertical later, publish that plugin to `artifacts/plugins/<vertical-id>/` and set `VERTICAL_ID` (and optionally `VERTICAL_PLUGIN_SOURCE_PATH` and `CUSTOMER_CONFIG_SOURCE_PATH`) before running `aspire publish`.
 
 ### 🌐 Multi-Language / i18n
 

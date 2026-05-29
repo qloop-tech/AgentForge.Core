@@ -72,7 +72,7 @@ WhatsApp → WAHA container → DevTunnel → /webhook (WebApi)
 ### Vertical plugin authoring
 - New industries should be implemented as separate vertical libraries under `src/Verticals/AgentForge.Verticals.<Vertical>/`.
 - The plugin contract lives in `src/AgentForge.Verticals.Abstractions/VerticalContracts.cs`.
-- A vertical should implement `IVerticalPlugin`, expose an `IVerticalDescriptor`, expose an `IVerticalMcpRegistrar`, and register any WebApi-specific services it needs.
+- A vertical should implement `IVerticalPlugin`, expose an `IVerticalMcpRegistrar`, configure any plugin-specific configuration sources/options, create the runtime `IVerticalDescriptor`, and register any WebApi-specific services it needs.
 - The current travel plugin entry point is `src/Verticals/AgentForge.Verticals.Travel/TravelVerticalPlugin.cs`.
 
 ### MCP tool authoring (current travel vertical example: `src/Verticals/AgentForge.Verticals.Travel/Tools/`)
@@ -92,7 +92,11 @@ WhatsApp → WAHA container → DevTunnel → /webhook (WebApi)
 - `WEBHOOK_BASE_URL` env var overrides DevTunnel when deploying outside local dev.
 - `wahaWebhookSecret` is a required Aspire secret parameter; `AgentForge.WebApi` uses it both to configure WAHA webhook HMAC signing and to verify incoming `X-Webhook-Hmac` requests against the raw request body.
 - `VERTICAL_PLUGIN_PATH` can point `AgentForge.WebApi` and `AgentForge.McpHost` at an external published plugin folder or DLL; when unset, `AgentForge.Verticals.Hosting` falls back to the in-tree travel plugin.
-- For Compose publishing, `AgentForge.AppHost` also supports `VERTICAL_ID`, `VERTICAL_PLUGIN_ROOT`, and `VERTICAL_PLUGIN_SOURCE_PATH`; publish mode bind-mounts the selected plugin into both hosts with `PublishAsDockerComposeService`.
+- During local `aspire start`, `VERTICAL_PLUGIN_PATH` and `CUSTOMER_CONFIG_PATH` are exposed as Aspire parameters so the dashboard can prompt for missing runtime inputs before `AgentForge.WebApi` and `AgentForge.McpHost` start.
+- The travel vertical's bundled runtime descriptor defaults now live in `src/Verticals/AgentForge.Verticals.Travel/Configuration/customer-profile.json` and `prompt.md`, bound via the .NET Options pattern.
+- `CUSTOMER_CONFIG_PATH` points `AgentForge.WebApi` and `AgentForge.McpHost` at an optional external customer config folder containing `customer-profile.json` and an optional `prompt.md`; when unset, the bundled travel defaults are used.
+- Keep graph-shaping values such as `VERTICAL_ID`, publish bind-mount source paths, and `WahaTier` as ordinary AppHost configuration rather than dashboard-entered parameters.
+- For Compose publishing, `AgentForge.AppHost` also supports `VERTICAL_ID`, `VERTICAL_PLUGIN_ROOT`, `VERTICAL_PLUGIN_SOURCE_PATH`, and `CUSTOMER_CONFIG_SOURCE_PATH`; publish mode bind-mounts the selected plugin and optional customer config into both hosts with `PublishAsDockerComposeService`.
 - Do not exclude the custom `WahaResource` from the manifest — `aspire publish` needs it to generate the `waha` Compose service and resolve `webhook`'s service reference correctly.
 
 ### Data layer
@@ -101,7 +105,7 @@ WhatsApp → WAHA container → DevTunnel → /webhook (WebApi)
 
 ### Agent persona
 - The active agent's system prompt, preview defaults, and branding come from the selected vertical descriptor.
-- The current travel example lives in `src/Verticals/AgentForge.Verticals.Travel/TravelVerticalDescriptor.cs`.
+- The current travel example composes its runtime descriptor from `src/Verticals/AgentForge.Verticals.Travel/Configuration/customer-profile.json`, `prompt.md`, and `ResolvedTravelVerticalDescriptor.cs`.
 - Scheduling logic lives in `src/AgentForge.WebApi/Scheduling/SchedulerService.cs` and dispatches through `IScheduledActionHandler`, currently implemented by `TravelScheduledActionHandler` in `src/Verticals/AgentForge.Verticals.Travel/`.
 
 ### Documentation positioning

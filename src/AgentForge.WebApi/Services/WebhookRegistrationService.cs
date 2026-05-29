@@ -77,9 +77,12 @@ public sealed partial class WebhookRegistrationService(
 
     private string? ResolveTunnelUrl()
     {
+        var manualOverride = config["WEBHOOK_BASE_URL"];
+        if (!string.IsNullOrWhiteSpace(manualOverride))
+            return manualOverride;
+
         // Priority order — check all known Aspire env var formats
-        return config["WEBHOOK_BASE_URL"]           // manual override
-            ?? config["WEBHOOK_HTTPS"]              // Aspire DevTunnel: {RESOURCE}_{SCHEME}
+        return config["WEBHOOK_HTTPS"]              // Aspire DevTunnel: {RESOURCE}_{SCHEME}
             ?? config["services:webhook:https:0"]   // Aspire service discovery format
             ?? config["services:waha-webhook:https:0"]; // legacy key we tried initially
     }
