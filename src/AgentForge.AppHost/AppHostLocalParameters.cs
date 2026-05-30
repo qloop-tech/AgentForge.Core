@@ -46,16 +46,27 @@ internal sealed class AppHostLocalParameters(
         string description,
         string placeholder)
     {
+        var parameterConfigurationKey = $"Parameters:{parameterName}";
+        var parameterConfigurationAlias = $"Parameters:{parameterName.Replace('-', '_')}";
+
         var parameter = builder.AddParameter(
                 parameterName,
-                new LegacyAwareOptionalPathDefault(builder.Configuration, legacyConfigurationKey))
+                new LegacyAwareOptionalPathDefault(
+                    builder.Configuration,
+                    parameterConfigurationKey,
+                    parameterConfigurationAlias,
+                    legacyConfigurationKey))
             .WithDescription(description)
             .WithCustomInput(resource => new InteractionInput
             {
                 InputType = InputType.Text,
                 Name = resource.Name,
                 Label = label,
-                Value = ResolveCurrentValue(builder.Configuration, parameterName, legacyConfigurationKey),
+                Value = ResolveCurrentValue(
+                    builder.Configuration,
+                    parameterConfigurationKey,
+                    parameterConfigurationAlias,
+                    legacyConfigurationKey),
                 Placeholder = placeholder,
                 Description = resource.Description,
                 EnableDescriptionMarkdown = resource.EnableDescriptionMarkdown
@@ -66,17 +77,25 @@ internal sealed class AppHostLocalParameters(
 
     private static string ResolveCurrentValue(
         IConfiguration configuration,
-        string parameterName,
+        string parameterConfigurationKey,
+        string parameterConfigurationAlias,
         string legacyConfigurationKey) =>
-        configuration[$"Parameters:{parameterName}"]
+        configuration[parameterConfigurationKey]
+        ?? configuration[parameterConfigurationAlias]
         ?? configuration[legacyConfigurationKey]
         ?? string.Empty;
 
     private sealed class LegacyAwareOptionalPathDefault(
         IConfiguration configuration,
+        string parameterConfigurationKey,
+        string parameterConfigurationAlias,
         string legacyConfigurationKey) : ParameterDefault
     {
-        public override string GetDefaultValue() => configuration[legacyConfigurationKey] ?? string.Empty;
+        public override string GetDefaultValue() =>
+            configuration[parameterConfigurationKey]
+            ?? configuration[parameterConfigurationAlias]
+            ?? configuration[legacyConfigurationKey]
+            ?? string.Empty;
 
         public override void WriteToManifest(ManifestPublishingContext context) =>
             context.Writer.WriteString("value", GetDefaultValue());

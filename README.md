@@ -403,7 +403,7 @@ They default to blank, so local startup no longer blocks on unresolved parameter
 - built-in in-tree travel plugin
 - bundled travel customer config
 
-If you want to preconfigure these overrides without using the dashboard, prefer standard Aspire parameter configuration:
+If you want to preconfigure these overrides without using the dashboard, the canonical Aspire parameter keys are `Parameters:vertical-plugin-path` and `Parameters:customer-config-path`. For env-style configuration, the AppHost also accepts these shell-friendly aliases:
 
 - `Parameters__vertical_plugin_path`
 - `Parameters__customer_config_path`
@@ -467,7 +467,7 @@ docker pull devlikeapro/waha-plus:noweb
 **4. Set the tier in Aspire user secrets**
 
 ```bash
-cd AgentForge.AppHost
+cd src/AgentForge.AppHost
 dotnet user-secrets set "WahaTier" "Plus"
 ```
 

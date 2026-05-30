@@ -130,7 +130,7 @@ public sealed partial class AgentChatService(
 
                 if (string.IsNullOrEmpty(baseUrl))
                 {
-                    logger.LogWarning("Skipping image — WEBHOOK_BASE_URL not configured: {Path}", url);
+                    logger.LogWarning("Skipping image — public webhook URL not configured: {Path}", url);
                     continue;
                 }
 
