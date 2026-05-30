@@ -48,6 +48,13 @@ internal static class AppHostProjectResourceExtensions
             {
                 service.AddVolume(customerConfigVolume);
             }
+
+            if (resourceName == "webhook")
+            {
+                service.Ports.Add("${WEBHOOK_HOST_PORT:-8080}:${WEBHOOK_PORT}");
+                service.AddEnvironmentalVariable("WEBHOOK_BASE_URL", "${WEBHOOK_BASE_URL}");
+                service.AddEnvironmentalVariable("WEBHOOK_PUBLIC_URL_MODE", "ConfiguredOnly");
+            }
         });
     }
 

@@ -4,15 +4,16 @@ namespace AgentForge.WebApi.Services;
 /// Registers the public webhook URL with WAHA on startup.
 /// Resolves the public base URL with local Aspire tunnel/service-discovery values first and
 /// falls back to WEBHOOK_BASE_URL only when no live tunnel URL is available.
-/// Retries in background until the tunnel URL is available.
+/// Published Docker Compose deployments can opt into configured-only mode, where WEBHOOK_BASE_URL
+/// must be supplied explicitly and no tunnel discovery/retry loop is attempted.
 /// Also exposes RegisterAsync for manual trigger via admin endpoint.
 /// </summary>
 public sealed partial class WebhookRegistrationService(
     WahaApiClient wahaClient,
     IConfiguration config,
-    IHostEnvironment environment,
     ILogger<WebhookRegistrationService> logger) : BackgroundService
 {
+    private const string ConfiguredOnlyPublicUrlMode = "ConfiguredOnly";
     private volatile string? _registeredUrl;
 
     public string? RegisteredUrl => _registeredUrl;
@@ -22,24 +23,30 @@ public sealed partial class WebhookRegistrationService(
         // Give WAHA and the tunnel a moment to finish initialising
         await Task.Delay(TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
 
+        if (UsesConfiguredPublicUrlOnly())
+        {
+            var configuredBaseUrl = PublicWebhookUrlResolver.GetConfiguredBaseUrl(config);
+            if (string.IsNullOrWhiteSpace(configuredBaseUrl))
+            {
+                LogPublishedDeploymentRequiresWebhookBaseUrl();
+                return;
+            }
+
+            await RegisterAsync(configuredBaseUrl, ct).ConfigureAwait(false);
+            return;
+        }
+
         while (!ct.IsCancellationRequested)
         {
-            var tunnelUrl = ResolveTunnelUrl();
+            var publicBaseUrl = ResolvePublicBaseUrl();
 
-            if (!string.IsNullOrWhiteSpace(tunnelUrl))
+            if (!string.IsNullOrWhiteSpace(publicBaseUrl))
             {
-                await RegisterAsync(tunnelUrl, ct).ConfigureAwait(false);
+                await RegisterAsync(publicBaseUrl, ct).ConfigureAwait(false);
                 return; // Successfully registered — stop background loop
             }
 
-            var retryMessage = environment.IsDevelopment()
-                ? "Tunnel URL not yet available. Will retry in 15s. " +
-                  "Once the dev tunnel is healthy, webhook will be registered automatically. " +
-                  "You can also POST /admin/register-webhook?url={{tunnelUrl}} to register manually."
-                : "Tunnel URL not yet available. Will retry in 15s. " +
-                  "Once the public webhook URL becomes available, webhook registration will be retried automatically.";
-
-            logger.LogInformation(retryMessage);
+            LogWaitingForAspireTunnelUrl();
 
             await Task.Delay(TimeSpan.FromSeconds(15), ct).ConfigureAwait(false);
         }
@@ -73,5 +80,8 @@ public sealed partial class WebhookRegistrationService(
         }
     }
 
-    private string? ResolveTunnelUrl() => PublicWebhookUrlResolver.GetBaseUrl(config);
+    private bool UsesConfiguredPublicUrlOnly()
+        => string.Equals(config["WEBHOOK_PUBLIC_URL_MODE"], ConfiguredOnlyPublicUrlMode, StringComparison.OrdinalIgnoreCase);
+
+    private string? ResolvePublicBaseUrl() => PublicWebhookUrlResolver.GetBaseUrl(config);
 }

@@ -1,4 +1,5 @@
 using AgentForge.AppHost;
+using Aspire.Hosting.Docker;
 using Projects;
 
 var builder = DistributedApplication.CreateBuilder(args);
@@ -44,10 +45,6 @@ var webhookApi = builder.AddProject<AgentForge_WebApi>("webhook")
     .WaitFor(waha)
     .WaitFor(mcpServer)
     .WithLocalVerticalInputs(localParameters);
-if (settings.IsPublishMode && !string.IsNullOrWhiteSpace(settings.ConfiguredWebhookBaseUrl))
-{
-    webhookApi.WithEnvironment("WEBHOOK_BASE_URL", settings.ConfiguredWebhookBaseUrl);
-}
 webhookApi.WithPublishVerticalRuntime(settings, "webhook");
 #endregion
 
@@ -71,8 +68,56 @@ if (!settings.IsPublishMode)
 #region Publish-only resources
 if (settings.IsPublishMode)
 {
-    builder.AddDockerComposeEnvironment("compose");
+    var composeDashboardBrowserToken = builder.AddParameter("composeDashboardBrowserToken", secret: true);
+
+    builder.AddDockerComposeEnvironment("compose")
+        .ConfigureEnvFile(env =>
+        {
+            SetEnvMetadata(
+                env,
+                "COMPOSEDASHBOARDBROWSERTOKEN",
+                defaultValue: null,
+                description: "Browser token used to sign in to the published Aspire dashboard.");
+            SetEnvMetadata(
+                env,
+                "WEBHOOK_BASE_URL",
+                settings.ConfiguredWebhookBaseUrl,
+                "Public base URL that WAHA should call for webhook delivery in published deployments. " +
+                "For local demos, set this to your external tunnel URL before starting Docker Compose.");
+            SetEnvMetadata(
+                env,
+                "WEBHOOK_HOST_PORT",
+                "8080",
+                "Host port that exposes the published webhook container for direct VPS access or an external tunnel.");
+        })
+        .WithDashboard(dashboard => dashboard
+            .WithEnvironment("Dashboard__ApplicationName", "AgentForge")
+            .WithEnvironment("Dashboard__Frontend__AuthMode", "BrowserToken")
+            .WithEnvironment("Dashboard__Frontend__BrowserToken", composeDashboardBrowserToken));
 }
 #endregion
 
 builder.Build().Run();
+
+static void SetEnvMetadata(
+    IDictionary<string, CapturedEnvironmentVariable> env,
+    string name,
+    string? defaultValue,
+    string description)
+{
+    if (!env.TryGetValue(name, out var variable))
+    {
+        variable = new CapturedEnvironmentVariable
+        {
+            Name = name
+        };
+        env[name] = variable;
+    }
+
+    variable.Description = description;
+
+    if (defaultValue is not null)
+    {
+        variable.DefaultValue = defaultValue;
+    }
+}

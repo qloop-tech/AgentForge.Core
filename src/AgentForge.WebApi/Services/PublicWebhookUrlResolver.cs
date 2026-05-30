@@ -2,6 +2,9 @@ namespace AgentForge.WebApi.Services;
 
 internal static class PublicWebhookUrlResolver
 {
+    public static string? GetConfiguredBaseUrl(IConfiguration config)
+        => config["WEBHOOK_BASE_URL"];
+
     public static string? GetBaseUrl(IConfiguration config)
         => GetConfiguredCandidates(config).FirstOrDefault(candidate => !string.IsNullOrWhiteSpace(candidate));
 
