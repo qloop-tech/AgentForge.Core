@@ -87,6 +87,9 @@ flowchart TD
 
 Alongside the live chat, `SchedulerService` dispatches generic scheduled actions to the active vertical's `IScheduledActionHandler` implementation.
 
+For the class-level plugin loading flow, runtime contracts, and the concrete travel example, see
+the **[Vertical Plugin System](docs/vertical-plugin-system.md)** deep dive.
+
 ---
 
 ## Technology Stack
@@ -95,7 +98,7 @@ Alongside the live chat, `SchedulerService` dispatches generic scheduled actions
 |---|---|---|
 | **Runtime** | .NET 10 / C# 14 | All projects |
 | **Orchestration** | [.NET Aspire 13.3](https://learn.microsoft.com/en-us/dotnet/aspire/) | Service discovery, health checks, OpenTelemetry, DevTunnel, secrets |
-| **WhatsApp Gateway** | [OpenWA](https://www.open-wa.org/) (`ghcr.io/rmyndharis/openwa`) | Self-hosted WhatsApp HTTP API + dashboard |
+| **WhatsApp Gateway** | [OpenWA](https://www.open-wa.org/) (auto-selects a prebuilt amd64 image or source-build fallback by host architecture) | Self-hosted WhatsApp HTTP API + dashboard |
 | **AI Agent Runtime** | [Microsoft Agents Framework 1.5](https://github.com/microsoft/agents) | `ChatClientAgent`, `AgentSession`, client-managed conversation history |
 | **LLM** | [Azure AI Foundry](https://azure.microsoft.com/en-us/products/ai-foundry/) (GPT-5.4 mini) | Chat completions backing the active vertical agent |
 | **AI Tool Protocol** | [Model Context Protocol 1.3](https://modelcontextprotocol.io/) | Structured HTTP-based tool server, auto-discovered by the agent |
@@ -432,16 +435,6 @@ customer-config/
 
 ---
 
-## OpenWA Provider Notes
-
-The runtime now uses a **single OpenWA integration path** instead of a Core/Plus split.
-
-- text and image sending go through `OpenWaApiClient`
-- the `/preview` workaround is gone because provider-native media sending is now the default path
-- Aspire provisions provider-side PostgreSQL and Redis resources alongside the OpenWA API and dashboard
-
----
-
 ## Customising the Current Travel Vertical
 
 ### Replace the tour catalog
@@ -472,110 +465,6 @@ For customer onboarding, prefer an external folder plus `CUSTOMER_CONFIG_PATH` s
 No changes needed in `AgentForge.WebApi` — the agent discovers new tools on startup.
 
 ---
-
-## Roadmap
-
-The following improvements are planned or open for contribution. Each item is tracked as a GitHub Issue — check the [Issues tab](../../issues) for the current status.
-
-### 🗄️ Persistence Layer — Azure Cosmos DB
-
-Replace the current in-memory `*Service` singletons (`TourService`, `DestinationService`, etc.) with a durable data store backed by **Azure Cosmos DB**.
-
-- Use the Aspire Cosmos DB integration for local development:
-  ```csharp
-  // AgentForge.AppHost/AppHost.cs
-  var cosmos = builder.AddAzureCosmosDB("cosmos").RunAsEmulator();
-  ```
-- Ref: https://aspire.dev/integrations/cloud/azure/azure-cosmos-db/azure-cosmos-db-host/#run-as-emulator
-- Persist conversation history (`AgentSessionStore`), vertical data packs, bookings, and lead data
-- Enables multi-tenant data isolation and cross-restart state survival
-
-### 🧪 Unit & Integration Tests
-
-Add automated test coverage across all layers.
-
-- **Unit tests** — one xUnit project per layer (`AgentForge.McpHost.Tests`, `AgentForge.WebApi.Tests`)
-  - Mock `OpenWaApiClient`, `AgentChatService`, and MCP tool services
-- **Integration tests** — use Aspire's `DistributedApplicationTestingBuilder`
-  - Spin up the full AppHost in-process, send a webhook request, and assert the WhatsApp reply
-- Ref: https://learn.microsoft.com/dotnet/aspire/testing/overview
-
-### 🔐 OAuth / Authentication for MCP Server
-
-Protect the `AgentForge.McpHost` `/mcp` endpoint with bearer token validation so that only authorised callers (the active vertical agent, MCP Inspector with a token) can invoke tools.
-
-- Use ASP.NET Core JWT bearer middleware
-- Configure allowed clients in `AgentForge.AppHost` user secrets
-- The MCP C# SDK supports passing `Authorization` headers on the client side
-
-### 🖥️ Admin Dashboard
-
-A web UI (Blazor or React) for agency staff to:
-- View and manage incoming booking enquiries
-- Update business data, catalog items, and availability
-- Monitor active WhatsApp conversations
-
-### 💳 Payment Gateway Integration
-
-Capture tour deposits directly in the chat flow:
-- Integrate **Razorpay** (South Asia) or **Stripe** (global) via new MCP tools
-- Generate payment links and send them over WhatsApp
-- Webhook handler to confirm payment and update booking status
-
-### 🏢 Multi-Tenant Support
-
-Allow a single deployment to serve multiple businesses and vertical instances:
-- Tenant resolution by WhatsApp number prefix or subdomain
-- Isolated Cosmos DB containers per tenant
-- Per-tenant vertical selection, system prompt, and business data pack
-- Aspire parameter-driven secret namespacing
-
-### ⚙️ CI/CD Pipeline
-
-GitHub Actions workflow for:
-- `dotnet build` on every PR (zero-warnings gate)
-- Unit and integration test run
-- Docker image build and push to Azure Container Registry
-- Optional: auto-deploy to Azure Container Apps on merge to `main`
-
-### 🐳 Container Deployment — Aspire-generated Docker Compose
-
-For the full published Compose, VPS, tunnel, and Cloudflare demo instructions, see the
-**[Deployment Guide](docs/deployment.md)**.
-
-That guide now covers:
-
-- publishing vertical plugins and Compose artifacts
-- production deployment env vars and runtime checklist
-- public webhook and OpenWA dashboard exposure
-- manual tunnel options for local demos
-- the repeatable Cloudflare-based Mac mini demo workflow
-
-### 🌐 Multi-Language / i18n
-
-Detect the customer's language from their first message and instruct the active vertical agent to reply in kind:
-- Add a language-detection step in `AgentChatService` before the agent prompt
-- Update the system prompt to include the detected locale
-- Fallback to English for unsupported languages
-
-### 🛡️ Rate Limiting & Provider Abuse Protection
-
-Prevent message flooding at both the API and provider layers:
-- **ASP.NET Core rate limiting middleware** on the `/webhook` endpoint (per-IP, sliding window)
-- **Provider-side throttling**: add OpenWA send-rate controls or queue limits to avoid WhatsApp bans
-- Per-phone-number cooldown in `WhatsAppMessageQueue` for repeat senders
-
-### 📊 Analytics & Reporting
-
-Track conversation quality and tour funnel metrics. Three complementary approaches:
-
-| Approach | Best for | Notes |
-|---|---|---|
-| **Azure Application Insights** (recommended) | Teams already on Azure | Zero new infra — extends the existing OpenTelemetry pipeline in `ServiceDefaults`. Add `TelemetryClient.TrackEvent("TourBooked", props)` in `AgentChatService`. Dashboards in Azure Portal / Workbooks. |
-| **Grafana + OpenTelemetry** | Open-source stack | Aspire already exports OTLP. Add a Grafana container resource in `AgentForge.AppHost` and route traces/metrics there — no SaaS dependency. |
-| **Custom built-in dashboard** | Full control | Store aggregated metrics in Cosmos DB (when added) and build a Blazor dashboard. Most effort, zero external dependency. |
-
-Suggested events to track: `MessageReceived`, `TourEnquiry`, `TourBooked`, `PaymentCaptured`, `AgentError`.
 
 ---
 

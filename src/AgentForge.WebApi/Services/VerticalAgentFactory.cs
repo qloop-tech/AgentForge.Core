@@ -1,6 +1,6 @@
+using AgentForge.Verticals.Abstractions;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-using AgentForge.Verticals.Abstractions;
 
 namespace AgentForge.WebApi.Services;
 

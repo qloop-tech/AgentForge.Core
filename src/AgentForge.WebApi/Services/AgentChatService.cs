@@ -1,6 +1,6 @@
-using Microsoft.Agents.AI;
 using System.Text.RegularExpressions;
 using AgentForge.Verticals.Abstractions;
+using Microsoft.Agents.AI;
 
 namespace AgentForge.WebApi.Services;
 

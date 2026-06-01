@@ -11,8 +11,8 @@ var verticalPlugin = verticalPluginLoader.Load();
 verticalPlugin.ConfigureConfiguration(builder.Configuration);
 
 builder.AddServiceDefaults();
-builder.Services.AddSingleton<IVerticalPluginLoader>(verticalPluginLoader);
-builder.Services.AddSingleton<IVerticalPlugin>(verticalPlugin);
+builder.Services.AddSingleton(verticalPluginLoader);
+builder.Services.AddSingleton(verticalPlugin);
 builder.Services.AddSingleton<IVerticalMcpRegistrar>(sp => sp.GetRequiredService<IVerticalPlugin>().McpRegistrar);
 builder.Services.AddSingleton<IVerticalDescriptor>(sp => sp.GetRequiredService<IVerticalPlugin>().CreateDescriptor(sp));
 verticalPlugin.RegisterCommonServices(builder.Services);

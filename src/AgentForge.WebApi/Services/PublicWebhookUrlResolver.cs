@@ -21,9 +21,7 @@ internal static class PublicWebhookUrlResolver
 
     private static string?[] GetConfiguredCandidates(IConfiguration config) =>
     [
-        config["WEBHOOK_HTTPS"],
-        config["services:webhook:https:0"],
-        config["services:waha-webhook:https:0"],
+        config["WEBHOOK_HTTP"],
         config["WEBHOOK_BASE_URL"]
     ];
 
@@ -42,7 +40,7 @@ internal static class PublicWebhookUrlResolver
             return true;
         }
 
-        baseUri = default!;
+        baseUri = null!;
         return false;
     }
 }

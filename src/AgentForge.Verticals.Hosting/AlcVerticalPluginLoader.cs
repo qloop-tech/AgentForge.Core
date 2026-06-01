@@ -6,7 +6,7 @@ namespace AgentForge.Verticals.Hosting;
 public sealed class AlcVerticalPluginLoader(string pluginPath) : IVerticalPluginLoader
 {
     private readonly string _pluginAssemblyPath = ResolvePluginAssemblyPath(pluginPath);
-    private readonly object _sync = new();
+    private readonly Lock _sync = new();
     private AlcVerticalPluginLoadContext? _loadContext;
     private IVerticalPlugin? _plugin;
 

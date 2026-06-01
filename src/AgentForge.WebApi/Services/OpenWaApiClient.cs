@@ -1,29 +1,21 @@
 using System.Net;
-using System.Net.Http.Json;
-using System.Text.Json;
-using AgentForge.WebApi.Models;
-using Microsoft.Extensions.Options;
 
 namespace AgentForge.WebApi.Services;
 
 public sealed class OpenWaApiClient(
     HttpClient httpClient,
+    IConfiguration configuration,
     IOptions<OpenWaWebhookSecurityOptions> webhookSecurityOptions,
     ILogger<OpenWaApiClient> logger)
 {
-    private static readonly string[] WebhookEvents =
-    [
-        "message.received",
-        "session.status"
-    ];
-
     public async Task SendTextAsync(string phoneNumber, string message, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(phoneNumber);
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
+        var sessionRouteId = await ResolveSessionRouteIdAsync(cancellationToken).ConfigureAwait(false);
 
         await PostAsync(
-                "/api/sessions/default/messages/send-text",
+                $"/api/sessions/{sessionRouteId}/messages/send-text",
                 new OpenWaSendTextRequest(phoneNumber, message),
                 cancellationToken)
             .ConfigureAwait(false);
@@ -37,9 +29,10 @@ public sealed class OpenWaApiClient(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(phoneNumber);
         ArgumentException.ThrowIfNullOrWhiteSpace(imageUrl);
+        var sessionRouteId = await ResolveSessionRouteIdAsync(cancellationToken).ConfigureAwait(false);
 
         await PostAsync(
-                "/api/sessions/default/messages/send-image",
+                $"/api/sessions/{sessionRouteId}/messages/send-image",
                 new OpenWaSendImageRequest(phoneNumber, new OpenWaImagePayload(imageUrl), caption),
                 cancellationToken)
             .ConfigureAwait(false);
@@ -47,16 +40,10 @@ public sealed class OpenWaApiClient(
 
     public async Task EnsureDefaultSessionAsync(CancellationToken cancellationToken = default)
     {
-        var session = await GetDefaultSessionAsync(cancellationToken).ConfigureAwait(false);
+        var session = await ResolveTargetSessionAsync(cancellationToken).ConfigureAwait(false);
         if (session is null)
         {
-            await CreateDefaultSessionAsync(cancellationToken).ConfigureAwait(false);
-            session = await GetDefaultSessionAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        if (session is null)
-        {
-            logger.LogWarning("OpenWA default session could not be resolved after creation.");
+            logger.LogWarning("OpenWA has no sessions available. Create or connect a session from the OpenWA dashboard first.");
             return;
         }
 
@@ -72,7 +59,7 @@ public sealed class OpenWaApiClient(
             case "DISCONNECTED":
             case "FAILED":
             case "STOPPED":
-                await RestartDefaultSessionAsync(cancellationToken).ConfigureAwait(false);
+                await RestartSessionAsync(ToSessionRouteId(session), cancellationToken).ConfigureAwait(false);
                 return;
             default:
                 logger.LogInformation("OpenWA default session is in status {Status}", session.Status ?? "<unknown>");
@@ -85,63 +72,99 @@ public sealed class OpenWaApiClient(
         ArgumentException.ThrowIfNullOrWhiteSpace(webhookUrl);
 
         await EnsureDefaultSessionAsync(cancellationToken).ConfigureAwait(false);
+        var sessionRouteId = await ResolveSessionRouteIdAsync(cancellationToken).ConfigureAwait(false);
 
-        var existingWebhooks = await GetWebhooksAsync(cancellationToken).ConfigureAwait(false);
+        var existingWebhooks = await GetWebhooksAsync(sessionRouteId, cancellationToken).ConfigureAwait(false);
         foreach (var existingWebhook in existingWebhooks)
         {
             if (!string.IsNullOrWhiteSpace(existingWebhook.Identifier))
             {
-                await DeleteWebhookAsync(existingWebhook.Identifier!, cancellationToken).ConfigureAwait(false);
+                await DeleteWebhookAsync(sessionRouteId, existingWebhook.Identifier!, cancellationToken).ConfigureAwait(false);
             }
         }
 
+        var secret = webhookSecurityOptions.Value.Secret;
         var request = new OpenWaWebhookRegistration(
             webhookUrl,
-            WebhookEvents,
-            webhookSecurityOptions.Value.Secret,
-            Enabled: true);
+            string.IsNullOrWhiteSpace(secret) ? null : secret);
 
-        await PostAsync("/api/sessions/default/webhooks", request, cancellationToken).ConfigureAwait(false);
+        await PostAsync($"/api/sessions/{sessionRouteId}/webhooks", request, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<OpenWaSession?> GetDefaultSessionAsync(CancellationToken cancellationToken)
+    private async Task<string> ResolveSessionRouteIdAsync(CancellationToken cancellationToken)
     {
-        using var response = await httpClient.GetAsync("/api/sessions/default", cancellationToken).ConfigureAwait(false);
-        if (response.StatusCode == HttpStatusCode.NotFound)
+        var session = await ResolveTargetSessionAsync(cancellationToken).ConfigureAwait(false);
+        if (session is null)
+        {
+            throw new InvalidOperationException("No OpenWA session is available. Create or connect a session in the OpenWA dashboard.");
+        }
+
+        return ToSessionRouteId(session);
+    }
+
+    private async Task<OpenWaSession?> ResolveTargetSessionAsync(CancellationToken cancellationToken)
+    {
+        var sessions = await GetSessionsAsync(cancellationToken).ConfigureAwait(false);
+        if (sessions.Count == 0)
         {
             return null;
         }
 
-        response.EnsureSuccessStatusCode();
-        return await ReadBodyAsync<OpenWaSession>(response, cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task CreateDefaultSessionAsync(CancellationToken cancellationToken)
-    {
-        using var response = await httpClient.PostAsJsonAsync(
-                "/api/sessions",
-                new OpenWaCreateSessionRequest("default", "Default Session"),
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        if (response.StatusCode == HttpStatusCode.Conflict)
+        var configuredSessionName = configuration["OPENWA_SESSION_NAME"];
+        if (!string.IsNullOrWhiteSpace(configuredSessionName))
         {
-            return;
+            var matchedConfiguredSession = sessions.FirstOrDefault(
+                session => string.Equals(session.Name, configuredSessionName, StringComparison.OrdinalIgnoreCase)
+                           || string.Equals(session.Id, configuredSessionName, StringComparison.OrdinalIgnoreCase));
+            if (matchedConfiguredSession is not null)
+            {
+                return matchedConfiguredSession;
+            }
+
+            logger.LogWarning(
+                "Configured OPENWA_SESSION_NAME '{SessionName}' was not found. Falling back to detected sessions.",
+                configuredSessionName);
         }
 
-        response.EnsureSuccessStatusCode();
+        return sessions.FirstOrDefault(session => string.Equals(session.Name, "default", StringComparison.OrdinalIgnoreCase))
+               ?? sessions.FirstOrDefault(IsSessionInteractive)
+               ?? sessions.FirstOrDefault();
     }
 
-    private async Task RestartDefaultSessionAsync(CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<OpenWaSession>> GetSessionsAsync(CancellationToken cancellationToken)
     {
-        using var response = await httpClient.PostAsync("/api/sessions/default/restart", content: null, cancellationToken)
+        using var response = await httpClient.GetAsync("/api/sessions", cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        return await ReadBodyAsync<List<OpenWaSession>>(response, cancellationToken).ConfigureAwait(false) ?? [];
+    }
+
+    private static bool IsSessionInteractive(OpenWaSession session)
+        => session.Status?.Trim().ToUpperInvariant() is "READY" or "CONNECTED" or "CONNECTING" or "SCAN_QR" or "INITIALIZING";
+
+    private static string ToSessionRouteId(OpenWaSession session)
+    {
+        var routeId = !string.IsNullOrWhiteSpace(session.Id)
+            ? session.Id
+            : session.Name;
+
+        if (string.IsNullOrWhiteSpace(routeId))
+        {
+            throw new InvalidOperationException("OpenWA returned a session without id/name.");
+        }
+
+        return Uri.EscapeDataString(routeId);
+    }
+
+    private async Task RestartSessionAsync(string sessionRouteId, CancellationToken cancellationToken)
+    {
+        using var response = await httpClient.PostAsync($"/api/sessions/{sessionRouteId}/restart", content: null, cancellationToken)
             .ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }
 
-    private async Task<IReadOnlyList<OpenWaWebhookDefinition>> GetWebhooksAsync(CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<OpenWaWebhookDefinition>> GetWebhooksAsync(string sessionRouteId, CancellationToken cancellationToken)
     {
-        using var response = await httpClient.GetAsync("/api/sessions/default/webhooks", cancellationToken).ConfigureAwait(false);
+        using var response = await httpClient.GetAsync($"/api/sessions/{sessionRouteId}/webhooks", cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
             return [];
@@ -151,10 +174,10 @@ public sealed class OpenWaApiClient(
         return await ReadBodyAsync<List<OpenWaWebhookDefinition>>(response, cancellationToken).ConfigureAwait(false) ?? [];
     }
 
-    private async Task DeleteWebhookAsync(string webhookId, CancellationToken cancellationToken)
+    private async Task DeleteWebhookAsync(string sessionRouteId, string webhookId, CancellationToken cancellationToken)
     {
         using var response = await httpClient.DeleteAsync(
-                $"/api/sessions/default/webhooks/{Uri.EscapeDataString(webhookId)}",
+                $"/api/sessions/{sessionRouteId}/webhooks/{Uri.EscapeDataString(webhookId)}",
                 cancellationToken)
             .ConfigureAwait(false);
 

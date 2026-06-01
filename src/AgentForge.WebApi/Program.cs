@@ -1,9 +1,8 @@
-using AgentForge.WebApi.Endpoints;
-using AgentForge.WebApi.Services;
-using AgentForge.WebApi.Queue;
-using AgentForge.WebApi.Scheduling;
 using AgentForge.Verticals.Abstractions;
 using AgentForge.Verticals.Hosting;
+using AgentForge.WebApi.Endpoints;
+using AgentForge.WebApi.Queue;
+using AgentForge.WebApi.Scheduling;
 using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,8 +14,8 @@ var verticalPlugin = verticalPluginLoader.Load();
 verticalPlugin.ConfigureConfiguration(builder.Configuration);
 
 builder.AddServiceDefaults();
-builder.Services.AddSingleton<IVerticalPluginLoader>(verticalPluginLoader);
-builder.Services.AddSingleton<IVerticalPlugin>(verticalPlugin);
+builder.Services.AddSingleton(verticalPluginLoader);
+builder.Services.AddSingleton(verticalPlugin);
 builder.Services.AddSingleton<IVerticalDescriptor>(sp => sp.GetRequiredService<IVerticalPlugin>().CreateDescriptor(sp));
 verticalPlugin.RegisterCommonServices(builder.Services);
 builder.Services
@@ -35,8 +34,7 @@ builder.Services.AddHttpClient<OpenWaApiClient>(client =>
 {
     client.BaseAddress = new Uri("http://openwa");
     var apiKey = builder.Configuration["OPENWA_API_KEY"] ?? string.Empty;
-    client.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
-    client.DefaultRequestHeaders.Add("X-API-KEY", apiKey);
+    client.DefaultRequestHeaders.Add("X-API-Key", apiKey);
 });
 
 // ─── MCP Server HTTP Client (Aspire service discovery) ────────────────────────

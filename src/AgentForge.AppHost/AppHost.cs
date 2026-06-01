@@ -21,7 +21,7 @@ var openWaPostgres = builder.AddPostgres("openwa-postgres", password: openWaPost
 var openWaDatabase = openWaPostgres.AddDatabase("openwa-db", "openwa");
 
 var openWa = builder.AddOpenWa("openwa", openWaApiKey, openWaEncryptionKey)
-    .WithPostgres(openWaDatabase)
+    .WithPostgres(openWaDatabase, openWaPostgresPassword)
     .WithRedis(openWaRedis)
     .WithDataVolume()
     .WithPersistentLifetime()
@@ -42,7 +42,7 @@ if (settings.IsPublishMode)
     });
 }
 
-var openWaEndpoint = openWa.Resource.PrimaryEndpoint;
+var openWaEndpoint = openWa.Resource.GetEndpoint("http");
 
 var mcpServer = builder.AddProject<AgentForge_McpHost>("mcpserver")
     .WithLocalVerticalInputs(localParameters)
@@ -117,6 +117,7 @@ if (settings.IsPublishMode)
 #endregion
 
 builder.Build().Run();
+return;
 
 static void SetEnvMetadata(
     IDictionary<string, CapturedEnvironmentVariable> env,

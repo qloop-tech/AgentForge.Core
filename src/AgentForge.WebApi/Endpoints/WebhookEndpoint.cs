@@ -1,6 +1,4 @@
 using AgentForge.WebApi.Queue;
-using AgentForge.WebApi.Models;
-using AgentForge.WebApi.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgentForge.WebApi.Endpoints;

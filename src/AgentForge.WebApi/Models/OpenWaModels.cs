@@ -1,6 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
-
 namespace AgentForge.WebApi.Models;
 
 public sealed record OpenWaApiEnvelope<T>(
@@ -30,9 +27,7 @@ public sealed record OpenWaImagePayload(
 
 public sealed record OpenWaWebhookRegistration(
     [property: JsonPropertyName("url")] string Url,
-    [property: JsonPropertyName("events")] string[] Events,
-    [property: JsonPropertyName("secret")] string Secret,
-    [property: JsonPropertyName("enabled")] bool Enabled);
+    [property: JsonPropertyName("secret")] string? Secret);
 
 public sealed record OpenWaWebhookDefinition(
     [property: JsonPropertyName("id")] string? Id,
@@ -113,18 +108,13 @@ public sealed record OpenWaMessage(
             return Content;
         }
 
-        if (Text is { ValueKind: JsonValueKind.String } textValue)
+        return Text switch
         {
-            return textValue.GetString();
-        }
-
-        if (Text is { ValueKind: JsonValueKind.Object } textObject
-            && textObject.TryGetProperty("body", out var nestedBody)
-            && nestedBody.ValueKind == JsonValueKind.String)
-        {
-            return nestedBody.GetString();
-        }
-
-        return null;
+            { ValueKind: JsonValueKind.String } textValue => textValue.GetString(),
+            { ValueKind: JsonValueKind.Object } textObject when textObject.TryGetProperty("body", out var nestedBody) &&
+                                                                nestedBody.ValueKind == JsonValueKind.String =>
+                nestedBody.GetString(),
+            _ => null
+        };
     }
 }
