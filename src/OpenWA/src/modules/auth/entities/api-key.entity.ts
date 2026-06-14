@@ -1,0 +1,54 @@
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
+
+export enum ApiKeyRole {
+  ADMIN = 'admin',
+  OPERATOR = 'operator',
+  VIEWER = 'viewer',
+}
+
+@Entity('api_keys')
+export class ApiKey {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ type: 'varchar', length: 100 })
+  name: string;
+
+  @Index({ unique: true })
+  @Column({ type: 'varchar', length: 64 })
+  keyHash: string;
+
+  @Column({ type: 'varchar', length: 8 })
+  keyPrefix: string;
+
+  @Column({
+    type: 'varchar',
+    length: 20,
+    default: ApiKeyRole.OPERATOR,
+  })
+  role: ApiKeyRole;
+
+  @Column({ type: 'text', array: true, nullable: true })
+  allowedIps: string[] | null;
+
+  @Column({ type: 'text', array: true, nullable: true })
+  allowedSessions: string[] | null;
+
+  @Column({ type: 'boolean', default: true })
+  isActive: boolean;
+
+  @Column({ type: 'timestamp', nullable: true })
+  expiresAt: Date | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastUsedAt: Date | null;
+
+  @Column({ type: 'int', default: 0 })
+  usageCount: number;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}

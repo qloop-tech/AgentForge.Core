@@ -1,0 +1,119 @@
+import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
+import { SwaggerModule } from '@nestjs/swagger';
+import helmet from 'helmet';
+import { AppModule } from './app.module';
+import { ShutdownService } from './common/services/shutdown.service';
+import { createSwaggerConfig } from './config/swagger.config';
+import { BullBoardAuthMiddleware } from './common/security/bull-board-auth.middleware';
+import { AuthService } from './modules/auth/auth.service';
+import { Request, Response, NextFunction } from 'express';
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+
+// Configuration loading order (later sources do NOT override earlier ones):
+//   1. Process env (Docker, shell, systemd) — highest priority
+//   2. .env (project-level overrides committed/managed by the user)
+const userEnvPath = path.resolve(process.cwd(), '.env');
+
+dotenv.config({ path: userEnvPath, override: false });
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  // Enable shutdown hooks for graceful shutdown
+  app.enableShutdownHooks();
+
+  // Wire up graceful shutdown service
+  const shutdownService = app.get(ShutdownService);
+  shutdownService.setShutdownCallback(async () => {
+    await app.close();
+  });
+
+  // Enhanced Security Headers (Phase 3 Security Audit)
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          scriptSrc: ["'self'"],
+          imgSrc: ["'self'", 'data:', 'https:'],
+          connectSrc: ["'self'"],
+          fontSrc: ["'self'"],
+          objectSrc: ["'none'"],
+          upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
+        },
+      },
+      hsts: {
+        maxAge: 31536000,
+        includeSubDomains: true,
+        preload: true,
+      },
+      noSniff: true,
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+      // Disable for API usage
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
+
+  // CORS Configuration (Phase 3 Security Audit)
+  const allowedOrigins = process.env.CORS_ORIGINS?.split(',').map(o => o.trim()) || ['*'];
+  app.enableCors({
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      // Allow requests with no origin (mobile apps, Postman, server-to-server)
+      if (!origin) return callback(null, true);
+
+      // Check if wildcard or origin matches
+      if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'X-API-Key', 'Authorization', 'X-Request-ID'],
+    exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
+    maxAge: 86400, // 24 hours
+  });
+
+  // Global prefix
+  app.setGlobalPrefix('api');
+
+  // Enhanced Validation pipe with security options
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true, // Strip properties not in DTO
+      forbidNonWhitelisted: true, // Throw error on unknown properties
+      transform: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
+      disableErrorMessages: process.env.NODE_ENV === 'production', // Hide details in prod
+    }),
+  );
+
+  // Swagger documentation
+  const config = createSwaggerConfig();
+
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api/docs', app, document);
+
+  // Protect the Bull Board queue UI (/api/admin/queues). It is mounted by
+  // @bull-board/nestjs as raw Express middleware that the global ApiKeyGuard
+  // does not cover; registering this before app.listen() ensures it runs ahead
+  // of the Bull Board router. Requires a valid ADMIN API key.
+  const bullBoardAuth = new BullBoardAuthMiddleware(app.get(AuthService));
+  app.use('/api/admin/queues', (req: Request, res: Response, next: NextFunction) => {
+    void bullBoardAuth.use(req, res, next);
+  });
+
+  const port = process.env.PORT || 2785;
+  await app.listen(port);
+
+  console.log(`🚀 OpenWA is running on: http://localhost:${port}`);
+  console.log(`📚 Swagger docs: http://localhost:${port}/api/docs`);
+}
+
+void bootstrap();

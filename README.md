@@ -160,7 +160,7 @@ whatsapp-ai-travel-agent/
 ├── src/
 │   ├── AgentForge.AppHost/          # .NET Aspire orchestration — defines all resources, dependencies, secrets
 │   ├── AgentForge.ServiceDefaults/  # Shared defaults — OpenTelemetry, health checks, HTTP resilience, service discovery
-│   ├── AgentForge.Hosting/          # Custom Aspire integration for OpenWA resources (API, dashboard)
+│   ├── OpenWA/                      # First-party OpenWA API and Vite dashboard source, orchestrated by AppHost
 │   ├── AgentForge.Verticals.Abstractions/ # Shared contracts for vertical metadata, messaging, and scheduled actions
 │   ├── AgentForge.Verticals.Hosting/ # Shared loader boundary used by both hosts to resolve the active vertical
 │   ├── AgentForge.McpHost/          # Generic MCP host — loads tools/resources from the active vertical plugin
