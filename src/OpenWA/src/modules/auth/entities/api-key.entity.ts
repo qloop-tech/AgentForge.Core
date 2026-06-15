@@ -1,4 +1,5 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
+import { dateColumnType } from '../../../common/utils/column-types';
 
 export enum ApiKeyRole {
   ADMIN = 'admin',
@@ -18,7 +19,7 @@ export class ApiKey {
   @Column({ type: 'varchar', length: 64 })
   keyHash: string;
 
-  @Column({ type: 'varchar', length: 8 })
+  @Column({ type: 'varchar', length: 12 })
   keyPrefix: string;
 
   @Column({
@@ -37,18 +38,18 @@ export class ApiKey {
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: dateColumnType(), nullable: true })
   expiresAt: Date | null;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: dateColumnType(), nullable: true })
   lastUsedAt: Date | null;
 
   @Column({ type: 'int', default: 0 })
   usageCount: number;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: dateColumnType() })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: dateColumnType() })
   updatedAt: Date;
 }

@@ -23,7 +23,8 @@ public sealed partial class WebhookRegistrationService(
         // Give OpenWA and the tunnel a moment to finish initialising
         await Task.Delay(TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
 
-        if (UsesConfiguredPublicUrlOnly())
+        var configuredOnly = UsesConfiguredPublicUrlOnly();
+        if (configuredOnly)
         {
             var configuredBaseUrl = PublicWebhookUrlResolver.GetConfiguredBaseUrl(config);
             if (string.IsNullOrWhiteSpace(configuredBaseUrl))
@@ -31,19 +32,27 @@ public sealed partial class WebhookRegistrationService(
                 LogPublishedDeploymentRequiresWebhookBaseUrl();
                 return;
             }
-
-            await RegisterAsync(configuredBaseUrl, ct).ConfigureAwait(false);
-            return;
         }
 
         while (!ct.IsCancellationRequested)
         {
-            var publicBaseUrl = ResolvePublicBaseUrl();
+            var publicBaseUrl = configuredOnly
+                ? PublicWebhookUrlResolver.GetConfiguredBaseUrl(config)
+                : ResolvePublicBaseUrl();
 
             if (!string.IsNullOrWhiteSpace(publicBaseUrl))
             {
-                await RegisterAsync(publicBaseUrl, ct).ConfigureAwait(false);
-                return; // Successfully registered — stop background loop
+                try
+                {
+                    await RegisterAsync(publicBaseUrl, ct).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (!ct.IsCancellationRequested)
+                {
+                    logger.LogWarning(ex, "OpenWA webhook registration failed. The service will retry.");
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
+                continue;
             }
 
             LogWaitingForAspireTunnelUrl();

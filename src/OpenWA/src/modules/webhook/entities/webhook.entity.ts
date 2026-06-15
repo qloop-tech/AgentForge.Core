@@ -8,7 +8,6 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Session } from '../../session/entities/session.entity';
-import { DateTransformer } from '../../../common/transformers/date.transformer';
 import { jsonColumnType, dateColumnType } from '../../../common/utils/column-types';
 
 @Entity('webhooks')
@@ -41,12 +40,12 @@ export class Webhook {
   @Column({ type: 'int', default: 3 })
   retryCount: number;
 
-  @Column({ type: dateColumnType(), nullable: true, transformer: DateTransformer })
+  @Column({ type: dateColumnType(), nullable: true })
   lastTriggeredAt: Date | null;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: dateColumnType() })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: dateColumnType() })
   updatedAt: Date;
 }

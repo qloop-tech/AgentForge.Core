@@ -134,7 +134,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
 function normalizeWebhook(webhook: Omit<Webhook, 'events'> & { events: string[] | string | null }): Webhook {
   if (Array.isArray(webhook.events)) {
-    return webhook;
+    return { ...webhook, events: webhook.events };
   }
 
   if (typeof webhook.events === 'string') {

@@ -1,4 +1,5 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, Index } from 'typeorm';
+import { dateColumnType } from '../../../common/utils/column-types';
 
 export enum AuditAction {
   // API Key events
@@ -82,6 +83,6 @@ export class AuditLog {
   errorMessage: string | null;
 
   @Index()
-  @CreateDateColumn()
+  @CreateDateColumn({ type: dateColumnType() })
   createdAt: Date;
 }

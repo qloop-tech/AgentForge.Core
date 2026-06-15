@@ -59,7 +59,7 @@ public sealed class OpenWaApiClient(
             case "DISCONNECTED":
             case "FAILED":
             case "STOPPED":
-                await RestartSessionAsync(ToSessionRouteId(session), cancellationToken).ConfigureAwait(false);
+                await StartSessionAsync(ToSessionRouteId(session), cancellationToken).ConfigureAwait(false);
                 return;
             default:
                 logger.LogInformation("OpenWA default session is in status {Status}", session.Status ?? "<unknown>");
@@ -75,12 +75,21 @@ public sealed class OpenWaApiClient(
         var sessionRouteId = await ResolveSessionRouteIdAsync(cancellationToken).ConfigureAwait(false);
 
         var existingWebhooks = await GetWebhooksAsync(sessionRouteId, cancellationToken).ConfigureAwait(false);
+        var matchingWebhook = existingWebhooks.FirstOrDefault(existingWebhook =>
+            string.Equals(existingWebhook.Url, webhookUrl, StringComparison.OrdinalIgnoreCase));
+
         foreach (var existingWebhook in existingWebhooks)
         {
-            if (!string.IsNullOrWhiteSpace(existingWebhook.Identifier))
+            if (!string.Equals(existingWebhook.Identifier, matchingWebhook?.Identifier, StringComparison.Ordinal)
+                && !string.IsNullOrWhiteSpace(existingWebhook.Identifier))
             {
                 await DeleteWebhookAsync(sessionRouteId, existingWebhook.Identifier!, cancellationToken).ConfigureAwait(false);
             }
+        }
+
+        if (matchingWebhook is not null)
+        {
+            return;
         }
 
         var secret = webhookSecurityOptions.Value.Secret;
@@ -122,12 +131,15 @@ public sealed class OpenWaApiClient(
             }
 
             logger.LogWarning(
-                "Configured OPENWA_SESSION_NAME '{SessionName}' was not found. Falling back to detected sessions.",
+                "Configured OPENWA_SESSION_NAME '{SessionName}' was not found. Create or connect this session in OpenWA.",
                 configuredSessionName);
+            return null;
         }
 
-        return sessions.FirstOrDefault(session => string.Equals(session.Name, "default", StringComparison.OrdinalIgnoreCase))
-               ?? sessions.FirstOrDefault(IsSessionInteractive)
+        return sessions.FirstOrDefault(session =>
+                   string.Equals(session.Name, "default", StringComparison.OrdinalIgnoreCase) && IsSessionReady(session))
+               ?? sessions.FirstOrDefault(IsSessionReady)
+               ?? sessions.FirstOrDefault(IsSessionStarting)
                ?? sessions.FirstOrDefault();
     }
 
@@ -138,8 +150,11 @@ public sealed class OpenWaApiClient(
         return await ReadBodyAsync<List<OpenWaSession>>(response, cancellationToken).ConfigureAwait(false) ?? [];
     }
 
-    private static bool IsSessionInteractive(OpenWaSession session)
-        => session.Status?.Trim().ToUpperInvariant() is "READY" or "CONNECTED" or "CONNECTING" or "SCAN_QR" or "INITIALIZING";
+    private static bool IsSessionReady(OpenWaSession session)
+        => session.Status?.Trim().ToUpperInvariant() is "READY" or "CONNECTED";
+
+    private static bool IsSessionStarting(OpenWaSession session)
+        => session.Status?.Trim().ToUpperInvariant() is "CONNECTING" or "INITIALIZING" or "AUTHENTICATING";
 
     private static string ToSessionRouteId(OpenWaSession session)
     {
@@ -155,9 +170,9 @@ public sealed class OpenWaApiClient(
         return Uri.EscapeDataString(routeId);
     }
 
-    private async Task RestartSessionAsync(string sessionRouteId, CancellationToken cancellationToken)
+    private async Task StartSessionAsync(string sessionRouteId, CancellationToken cancellationToken)
     {
-        using var response = await httpClient.PostAsync($"/api/sessions/{sessionRouteId}/restart", content: null, cancellationToken)
+        using var response = await httpClient.PostAsync($"/api/sessions/{sessionRouteId}/start", content: null, cancellationToken)
             .ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }

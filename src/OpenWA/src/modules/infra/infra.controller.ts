@@ -99,7 +99,7 @@ export class InfraController {
   @Post('storage/import')
   @UseInterceptors(FileInterceptor('file'))
   @ApiOperation({ summary: 'Import storage from tar.gz' })
-  async importStorage(@UploadedFile() file: Express.Multer.File): Promise<{ imported: number }> {
+  async importStorage(@UploadedFile() file: { buffer: Buffer }): Promise<{ imported: number }> {
     const stream = Readable.from(file.buffer);
     return { imported: await this.storageService.importFromStream(stream) };
   }

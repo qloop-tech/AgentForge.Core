@@ -1,5 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
-import { jsonColumnType } from '../../../common/utils/column-types';
+import { dateColumnType, jsonColumnType } from '../../../common/utils/column-types';
 
 export enum MessageDirection {
   INCOMING = 'incoming',
@@ -62,6 +62,6 @@ export class Message {
   @Index()
   status: MessageStatus;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: dateColumnType() })
   createdAt: Date;
 }

@@ -228,18 +228,8 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   }
 
   async disconnect(): Promise<void> {
-    if (this.client) {
-      try {
-        // Use destroy instead of logout to preserve session data
-        // This allows reconnecting without needing to scan QR again
-        await this.client.destroy();
-      } catch (error) {
-        this.logger.warn('Destroy client failed:', String(error));
-        // Already destroyed or not initialized - ignore
-      }
-      this.client = null;
-      this.setStatus(EngineStatus.DISCONNECTED);
-    }
+    await this.destroyClientPreservingAuth();
+    this.setStatus(EngineStatus.DISCONNECTED);
   }
 
   async logout(): Promise<void> {
@@ -262,11 +252,8 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   }
 
   async destroy(): Promise<void> {
-    if (this.client) {
-      await this.client.destroy();
-      this.client = null;
-      this.setStatus(EngineStatus.DISCONNECTED);
-    }
+    await this.destroyClientPreservingAuth();
+    this.setStatus(EngineStatus.DISCONNECTED);
   }
 
   getStatus(): EngineStatus {
@@ -286,8 +273,10 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   }
 
   async sendTextMessage(chatId: string, text: string): Promise<MessageResult> {
-    this.ensureReady();
-    const msg = await this.client!.sendMessage(chatId, text);
+    const msg = await this.sendWithBrowserRecovery(() => {
+      this.ensureReady();
+      return this.client!.sendMessage(chatId, text);
+    });
     return {
       id: msg.id._serialized,
       timestamp: msg.timestamp,
@@ -311,8 +300,6 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   }
 
   private async sendMediaMessage(chatId: string, media: MediaInput): Promise<MessageResult> {
-    this.ensureReady();
-
     let messageMedia: MessageMedia;
 
     if (typeof media.data === 'string') {
@@ -328,14 +315,80 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       messageMedia = new MessageMedia(media.mimetype, media.data.toString('base64'), media.filename);
     }
 
-    const msg = await this.client!.sendMessage(chatId, messageMedia, {
-      caption: media.caption,
+    const msg = await this.sendWithBrowserRecovery(() => {
+      this.ensureReady();
+      return this.client!.sendMessage(chatId, messageMedia, {
+        caption: media.caption,
+      });
     });
 
     return {
       id: msg.id._serialized,
       timestamp: msg.timestamp,
     };
+  }
+
+  private async sendWithBrowserRecovery<T>(send: () => Promise<T>): Promise<T> {
+    try {
+      return await send();
+    } catch (error) {
+      if (!this.isRecoverableBrowserError(error)) {
+        throw error;
+      }
+
+      this.logger.warn(`Recovering WhatsApp browser after send failure: ${String(error)}`);
+      await this.destroyClientPreservingAuth();
+      await this.initialize(this.callbacks);
+      this.ensureReady();
+      return await send();
+    }
+  }
+
+  private async destroyClientPreservingAuth(): Promise<void> {
+    const client = this.client as
+      | (Client & {
+          pupBrowser?: {
+            close?: () => Promise<void>;
+            isConnected?: () => boolean;
+            process?: () => { kill?: (signal?: NodeJS.Signals) => void } | null;
+          };
+        })
+      | null;
+    const browser = client?.pupBrowser;
+
+    if (this.client) {
+      try {
+        await this.client.destroy();
+      } catch (error) {
+        this.logger.warn('Destroy client failed:', String(error));
+      }
+    }
+
+    try {
+      if (browser?.isConnected?.()) {
+        await browser.close?.();
+      }
+    } catch (error) {
+      this.logger.warn('Browser close failed:', String(error));
+    }
+
+    try {
+      browser?.process?.()?.kill?.('SIGKILL');
+    } catch (error) {
+      this.logger.warn('Browser process kill failed:', String(error));
+    }
+
+    this.client = null;
+  }
+
+  private isRecoverableBrowserError(error: unknown): boolean {
+    const message = String(error);
+    return (
+      message.includes('detached Frame') ||
+      message.includes('Execution context was destroyed') ||
+      message.includes('Protocol error') ||
+      message.includes('Target closed')
+    );
   }
 
   async getContacts(): Promise<Contact[]> {

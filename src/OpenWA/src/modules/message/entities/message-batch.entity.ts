@@ -1,5 +1,4 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
-import { DateTransformer } from '../../../common/transformers/date.transformer';
 import { jsonColumnType, dateColumnType } from '../../../common/utils/column-types';
 
 export enum BatchStatus {
@@ -74,15 +73,15 @@ export class MessageBatch {
   @Column({ name: 'current_index', default: 0 })
   currentIndex: number;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: dateColumnType() })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updated_at' })
+  @UpdateDateColumn({ name: 'updated_at', type: dateColumnType() })
   updatedAt: Date;
 
-  @Column({ name: 'started_at', type: dateColumnType(), nullable: true, transformer: DateTransformer })
+  @Column({ name: 'started_at', type: dateColumnType(), nullable: true })
   startedAt: Date | null;
 
-  @Column({ name: 'completed_at', type: dateColumnType(), nullable: true, transformer: DateTransformer })
+  @Column({ name: 'completed_at', type: dateColumnType(), nullable: true })
   completedAt: Date | null;
 }

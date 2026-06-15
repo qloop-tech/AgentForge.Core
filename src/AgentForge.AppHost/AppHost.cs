@@ -21,51 +21,19 @@ var openWaRedis = builder.AddRedis("openwa-redis")
 var openWaPostgres = builder.AddPostgres("openwa-postgres", password: openWaPostgresPassword)
     .WithDataVolume();
 var openWaDatabase = openWaPostgres.AddDatabase("openwa-db", "openwa");
+var openWaNodeEnvironment = settings.IsPublishMode ? "production" : "development";
+var openWaDataPath = settings.IsPublishMode ? "/app/data" : "data";
+var openWaPuppeteerExecutablePath = settings.IsPublishMode
+    ? "/usr/bin/chromium"
+    : builder.Configuration["OPENWA_PUPPETEER_EXECUTABLE_PATH"]
+      ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
-var openWa = builder.AddDockerfileFactory("openwa", "../OpenWA", _ => """
-    FROM node:22-bookworm-slim AS build
-    WORKDIR /app
-    ENV PUPPETEER_SKIP_DOWNLOAD=true
-    COPY package*.json ./
-    RUN npm ci --ignore-scripts
-    COPY . .
-    RUN npm run build
-    RUN npm prune --omit=dev --ignore-scripts
-
-    FROM node:22-bookworm-slim AS runtime
-    RUN apt-get update \
-        && apt-get install -y --no-install-recommends \
-            chromium \
-            dumb-init \
-            ca-certificates \
-            fonts-liberation \
-            libasound2 \
-            libatk-bridge2.0-0 \
-            libatk1.0-0 \
-            libcups2 \
-            libdrm2 \
-            libgbm1 \
-            libgtk-3-0 \
-            libnspr4 \
-            libnss3 \
-            libxcomposite1 \
-            libxdamage1 \
-            libxrandr2 \
-            xdg-utils \
-        && rm -rf /var/lib/apt/lists/*
-    ENV NODE_ENV=production
-    ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-    WORKDIR /app
-    COPY --from=build /app/package*.json ./
-    COPY --from=build /app/node_modules ./node_modules
-    COPY --from=build /app/dist ./dist
-    EXPOSE 2785
-    ENTRYPOINT ["dumb-init", "--"]
-    CMD ["node", "dist/main"]
-    """)
-    .WithHttpEndpoint(targetPort: 2785, name: "http")
-    .WithEnvironment("NODE_ENV", "production")
-    .WithEnvironment("PORT", "2785")
+var openWa = builder.AddNodeApp("openwa", "../OpenWA", "dist/main")
+    .WithNpm(installCommand: "ci", installArgs: ["--ignore-scripts"])
+    .WithRunScript("start:dev")
+    .WithBuildScript("build")
+    .WithHttpEndpoint(port: 2785, env: "PORT")
+    .WithEnvironment("NODE_ENV", openWaNodeEnvironment)
     .WithEnvironment("API_PREFIX", "/api")
     .WithEnvironment("API_MASTER_KEY", openWaApiKey)
     .WithEnvironment("API_KEY_MASTER", openWaApiKey)
@@ -80,16 +48,15 @@ var openWa = builder.AddDockerfileFactory("openwa", "../OpenWA", _ => """
     .WithEnvironment("QUEUE_ENABLED", "true")
     .WithEnvironment("REDIS_HOST", openWaRedis.Resource.Host)
     .WithEnvironment("REDIS_PORT", openWaRedis.Resource.Port)
-    .WithEnvironment("SESSION_DATA_PATH", "/app/data/sessions")
+    .WithEnvironment("SESSION_DATA_PATH", $"{openWaDataPath}/sessions")
     .WithEnvironment("STORAGE_TYPE", "local")
-    .WithEnvironment("STORAGE_LOCAL_PATH", "/app/data/media")
+    .WithEnvironment("STORAGE_LOCAL_PATH", $"{openWaDataPath}/media")
     .WithEnvironment("PUPPETEER_HEADLESS", "true")
+    .WithEnvironment("PUPPETEER_EXECUTABLE_PATH", openWaPuppeteerExecutablePath)
     .WithEnvironment("PUPPETEER_ARGS", "--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-gpu")
     .WithEnvironment("SOCKET_IO_PATH", "/api/socket.io")
     .WithEnvironment("AUTO_START_SESSIONS", "true")
     .WithHttpHealthCheck("/api/health")
-    .WithVolume("openwa-data", "/app/data")
-    .WithPersistentLifetime()
     .WaitFor(openWaPostgres)
     .WaitFor(openWaRedis);
 openWa.WithUrl($"{openWa.Resource.GetEndpoint("http")}/api/docs", "OpenWA Swagger");
@@ -103,14 +70,6 @@ openWaDashboard.PublishAsStaticWebsite("/api", openWa, options =>
     options.OutputPath = "dist";
     options.StripPrefix = false;
 });
-
-if (settings.IsPublishMode)
-{
-    openWa.PublishAsDockerComposeService((_, service) =>
-    {
-        service.Restart = "unless-stopped";
-    });
-}
 
 var openWaEndpoint = openWa.Resource.GetEndpoint("http");
 
@@ -126,6 +85,7 @@ var webhookApi = builder.AddProject<AgentForge_WebApi>("webhook")
     .WithReference(aiFoundry)
     .WithEnvironment("OPENWA_API_KEY", openWaApiKey)
     .WithEnvironment("OPENWA_WEBHOOK_SECRET", openWaWebhookSecret)
+    .WithEnvironment("OPENWA_SESSION_NAME", "travel-bot")
     .WaitFor(openWa)
     .WaitFor(mcpServer)
     .WithLocalVerticalInputs(localParameters);
@@ -152,6 +112,53 @@ if (!settings.IsPublishMode)
 #region Publish-only resources
 if (settings.IsPublishMode)
 {
+    openWa.PublishAsDockerFile(container =>
+    {
+        container
+            .WithDockerfileFactory("../OpenWA", _ => """
+                FROM node:22-bookworm-slim AS build
+                WORKDIR /app
+                ENV PUPPETEER_SKIP_DOWNLOAD=true
+                COPY package*.json ./
+                RUN npm ci --ignore-scripts
+                COPY . .
+                RUN npm run build
+                RUN npm prune --omit=dev --ignore-scripts
+
+                FROM node:22-bookworm-slim AS runtime
+                RUN apt-get update \
+                    && apt-get install -y --no-install-recommends \
+                        chromium \
+                        dumb-init \
+                        ca-certificates \
+                        fonts-liberation \
+                        libasound2 \
+                        libatk-bridge2.0-0 \
+                        libatk1.0-0 \
+                        libcups2 \
+                        libdrm2 \
+                        libgbm1 \
+                        libgtk-3-0 \
+                        libnspr4 \
+                        libnss3 \
+                        libxcomposite1 \
+                        libxdamage1 \
+                        libxrandr2 \
+                        xdg-utils \
+                    && rm -rf /var/lib/apt/lists/*
+                ENV NODE_ENV=production
+                ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+                WORKDIR /app
+                COPY --from=build /app/package*.json ./
+                COPY --from=build /app/node_modules ./node_modules
+                COPY --from=build /app/dist ./dist
+                EXPOSE 2785
+                ENTRYPOINT ["dumb-init", "--"]
+                CMD ["node", "dist/main"]
+                """)
+            .WithVolume("openwa-data", "/app/data");
+    });
+
     var composeDashboardBrowserToken = builder.AddParameter("composeDashboardBrowserToken", secret: true);
 
     builder.AddDockerComposeEnvironment("compose")

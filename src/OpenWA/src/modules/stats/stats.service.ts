@@ -115,7 +115,6 @@ export class StatsService {
     const since = this.getPeriodStart(period);
     const interval = period === '24h' ? 'hour' : 'day';
 
-    // Time series - using raw query for SQLite compatibility
     const timeSeries = await this.getTimeSeries(since, interval);
 
     // By type
@@ -169,7 +168,7 @@ export class StatsService {
       .addSelect('COUNT(*)', 'messageCount')
       .where('m.createdAt >= :since', { since })
       .groupBy('m.chatId')
-      .orderBy('messageCount', 'DESC')
+      .orderBy('COUNT(*)', 'DESC')
       .limit(10)
       .getRawMany<{ chatId: string; messageCount: string }>();
 
@@ -224,7 +223,7 @@ export class StatsService {
       .addSelect('MAX(m.createdAt)', 'lastActive')
       .where('m.sessionId = :sessionId', { sessionId })
       .groupBy('m.chatId')
-      .orderBy('count', 'DESC')
+      .orderBy('COUNT(*)', 'DESC')
       .limit(10)
       .getRawMany<{ chatId: string; count: string; lastActive: string }>();
 
@@ -256,21 +255,20 @@ export class StatsService {
   }
 
   private async getTimeSeries(since: Date, interval: 'hour' | 'day'): Promise<TimeSeriesPoint[]> {
-    // SQLite-compatible time series query
-    const formatStr = interval === 'hour' ? '%Y-%m-%d %H:00:00' : '%Y-%m-%d';
+    const bucketExpression = `date_trunc('${interval}', "m"."createdAt")`;
 
     const raw = await this.messageRepo
       .createQueryBuilder('m')
-      .select(`strftime('${formatStr}', m.createdAt)`, 'timestamp')
+      .select(bucketExpression, 'timestamp')
       .addSelect(`SUM(CASE WHEN m.direction = 'outgoing' THEN 1 ELSE 0 END)`, 'sent')
       .addSelect(`SUM(CASE WHEN m.direction = 'incoming' THEN 1 ELSE 0 END)`, 'received')
       .where('m.createdAt >= :since', { since })
-      .groupBy('timestamp')
-      .orderBy('timestamp', 'ASC')
-      .getRawMany<{ timestamp: string; sent: string; received: string }>();
+      .groupBy(bucketExpression)
+      .orderBy(bucketExpression, 'ASC')
+      .getRawMany<{ timestamp: string | Date; sent: string; received: string }>();
 
     return raw.map(r => ({
-      timestamp: r.timestamp,
+      timestamp: new Date(r.timestamp).toISOString(),
       sent: parseInt(r.sent || '0'),
       received: parseInt(r.received || '0'),
     }));
@@ -281,7 +279,7 @@ export class StatsService {
 
     const raw = await this.messageRepo
       .createQueryBuilder('m')
-      .select(`CAST(strftime('%H', m.createdAt) AS INTEGER)`, 'hour')
+      .select(`EXTRACT(HOUR FROM "m"."createdAt")::int`, 'hour')
       .addSelect(`SUM(CASE WHEN m.direction = 'outgoing' THEN 1 ELSE 0 END)`, 'sent')
       .addSelect(`SUM(CASE WHEN m.direction = 'incoming' THEN 1 ELSE 0 END)`, 'received')
       .where('m.sessionId = :sessionId', { sessionId })

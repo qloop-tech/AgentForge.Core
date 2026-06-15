@@ -1,3 +1,3 @@
 export const jsonColumnType = (): 'jsonb' => 'jsonb';
 
-export const dateColumnType = (): 'timestamp' => 'timestamp';
+export const dateColumnType = (): 'timestamptz' => 'timestamptz';
