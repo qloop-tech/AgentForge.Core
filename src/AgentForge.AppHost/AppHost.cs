@@ -16,10 +16,14 @@ var openWaPostgresPassword = builder.AddParameter("openWaPostgresPassword", secr
 #endregion
 
 #region Core resources
+
 var openWaRedis = builder.AddRedis("openwa-redis")
-    .WithDataVolume();
+    .WithDataVolume()
+    .WithRedisInsight();
+
 var openWaPostgres = builder.AddPostgres("openwa-postgres", password: openWaPostgresPassword)
-    .WithDataVolume();
+    .WithDataVolume()
+    .WithPgWeb();
 var openWaDatabase = openWaPostgres.AddDatabase("openwa-db", "openwa");
 var openWaNodeEnvironment = settings.IsPublishMode ? "production" : "development";
 var openWaDataPath = settings.IsPublishMode ? "/app/data" : "data";

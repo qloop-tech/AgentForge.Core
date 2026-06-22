@@ -28,6 +28,8 @@ public sealed class WhatsAppMessageQueue(
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        // Persist the inbound WhatsApp message in Redis Streams so it survives process restarts
+        // and can be replayed or retried by the background consumer.
         await _database.StreamAddAsync(
                 StreamName,
                 [
@@ -48,6 +50,7 @@ public sealed class WhatsAppMessageQueue(
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            // Prefer already-pending work first so the consumer can drain backlog before pulling new entries.
             var entries = await ReadNextBatchAsync(stoppingToken).ConfigureAwait(false);
             if (entries.Length == 0)
             {
@@ -68,12 +71,13 @@ public sealed class WhatsAppMessageQueue(
     {
         try
         {
+            // Consumer groups let multiple workers safely share the same Redis Stream without double-processing.
             await _database.StreamCreateConsumerGroupAsync(StreamName, ConsumerGroup, "0-0", createStream: true)
                 .ConfigureAwait(false);
         }
         catch (RedisServerException ex) when (ex.Message.Contains("BUSYGROUP", StringComparison.OrdinalIgnoreCase))
         {
-            // The group already exists.
+            // The group already exists, which is expected on subsequent starts.
         }
     }
 
@@ -81,6 +85,8 @@ public sealed class WhatsAppMessageQueue(
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        // Read entries that this consumer previously claimed but has not finished yet before
+        // pulling brand-new messages from the stream.
         var pendingForConsumer = await _database.StreamReadGroupAsync(
                 StreamName,
                 ConsumerGroup,
@@ -94,6 +100,7 @@ public sealed class WhatsAppMessageQueue(
             return pendingForConsumer;
         }
 
+        // When no pending work exists, fetch the next unclaimed messages from the stream.
         return await _database.StreamReadGroupAsync(
                 StreamName,
                 ConsumerGroup,
@@ -109,6 +116,8 @@ public sealed class WhatsAppMessageQueue(
         var lockKey = $"agentforge:whatsapp:lock:{message.Phone}";
         var lockValue = _consumerName;
 
+        // Serialize work per phone so a second message cannot race in and interleave replies
+        // for the same conversation.
         while (!await _database.StringSetAsync(lockKey, lockValue, PhoneLockExpiry, When.NotExists).ConfigureAwait(false))
         {
             await Task.Delay(IdleDelay, cancellationToken).ConfigureAwait(false);
@@ -120,6 +129,8 @@ public sealed class WhatsAppMessageQueue(
             var agentChat = scope.ServiceProvider.GetRequiredService<AgentChatService>();
             await agentChat.HandleAsync(message.Phone, message.Body, cancellationToken).ConfigureAwait(false);
 
+            // A successful handler run means the work is complete, so the stream entry can be
+            // acknowledged and removed from the pending set.
             await AcknowledgeAsync(entry.Id).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -141,6 +152,8 @@ public sealed class WhatsAppMessageQueue(
         var nextAttempt = message.Attempts + 1;
         if (nextAttempt >= _maxAttempts)
         {
+            // After the maximum retry budget is exhausted, preserve the failure for inspection
+            // and remove the original message from the active stream.
             await _database.StreamAddAsync(
                     DeadLetterStreamName,
                     message.ToNameValueEntries(nextAttempt, ex.Message))
@@ -161,6 +174,8 @@ public sealed class WhatsAppMessageQueue(
             nextAttempt + 1,
             _maxAttempts);
 
+        // Requeue the message with an incremented attempt count so the consumer can retry later
+        // without losing the original context or error details.
         await Task.Delay(RetryDelay).ConfigureAwait(false);
         await _database.StreamAddAsync(
                 StreamName,
@@ -171,6 +186,8 @@ public sealed class WhatsAppMessageQueue(
 
     private async Task AcknowledgeAsync(RedisValue messageId)
     {
+        // Mark the entry as processed by this consumer group and delete it from the main stream
+        // so it does not reappear on future reads.
         await _database.StreamAcknowledgeAsync(StreamName, ConsumerGroup, messageId).ConfigureAwait(false);
         await _database.StreamDeleteAsync(StreamName, [messageId]).ConfigureAwait(false);
     }
@@ -184,6 +201,8 @@ public sealed class WhatsAppMessageQueue(
             return 0
             """;
 
+        // Only release the phone lock if this consumer still owns it; otherwise another worker
+        // may have already advanced the conversation and we should not remove that lock.
         await _database.ScriptEvaluateAsync(script, [key], [expectedValue]).ConfigureAwait(false);
     }
 
