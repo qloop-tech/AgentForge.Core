@@ -352,7 +352,7 @@
     "sending": "Sending...",
     "viewOnly": "View Only",
     "responseEmpty": "Send a message to see the API response",
-    "successLabel": "200 OK - Success",
+    "successLabel": "200 OK - Accepted for delivery",
     "failedLabel": "400 - Failed",
     "response": {
       "timestamp": "Timestamp",

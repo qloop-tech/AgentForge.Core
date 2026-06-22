@@ -8,6 +8,8 @@ import { EngineFactory } from '../../engine/engine.factory';
 import { EventsGateway } from '../events/events.gateway';
 import { WebhookService } from '../webhook/webhook.service';
 import { HookManager } from '../../core/hooks';
+import { EngineEventCallbacks } from '../../engine/interfaces/whatsapp-engine.interface';
+import { Message, MessageStatus } from '../message/entities/message.entity';
 
 function createMockSession(overrides: Partial<Session> = {}): Session {
   return {
@@ -30,6 +32,7 @@ function createMockSession(overrides: Partial<Session> = {}): Session {
 describe('SessionService', () => {
   let service: SessionService;
   let repository: jest.Mocked<Partial<Repository<Session>>>;
+  let messageRepository: jest.Mocked<Partial<Repository<Message>>>;
   let dataSource: jest.Mocked<Partial<DataSource>>;
   let engineFactory: jest.Mocked<Partial<EngineFactory>>;
   let eventsGateway: jest.Mocked<Partial<EventsGateway>>;
@@ -45,6 +48,9 @@ describe('SessionService', () => {
       create: jest.fn(),
       save: jest.fn(),
       remove: jest.fn(),
+      update: jest.fn(),
+    };
+    messageRepository = {
       update: jest.fn(),
     };
 
@@ -73,6 +79,7 @@ describe('SessionService', () => {
     eventsGateway = {
       emitSessionStatus: jest.fn(),
       emitMessage: jest.fn(),
+      emitMessageAck: jest.fn(),
     };
 
     webhookService = {
@@ -89,6 +96,10 @@ describe('SessionService', () => {
         {
           provide: getRepositoryToken(Session),
           useValue: repository,
+        },
+        {
+          provide: getRepositoryToken(Message),
+          useValue: messageRepository,
         },
         {
           provide: getDataSourceToken(),
@@ -267,6 +278,41 @@ describe('SessionService', () => {
 
       expect(mockEngine.initialize).toHaveBeenCalledTimes(2);
       expect(service.getActiveCount()).toBe(1);
+    });
+
+    it('persists and emits message acknowledgments from the engine', async () => {
+      let callbacks: EngineEventCallbacks | undefined;
+      const session = createMockSession();
+      (repository.findOne as jest.Mock).mockResolvedValue(session);
+      (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+      (messageRepository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+      mockEngine.initialize.mockImplementationOnce(async (registeredCallbacks: EngineEventCallbacks) => {
+        callbacks = registeredCallbacks;
+      });
+
+      await service.start('sess-uuid-1');
+      callbacks?.onMessageAck?.('wa-msg-1', 2);
+      await new Promise(resolve => setImmediate(resolve));
+
+      expect(messageRepository.update).toHaveBeenCalledWith(
+        { sessionId: 'sess-uuid-1', waMessageId: 'wa-msg-1' },
+        { status: MessageStatus.DELIVERED },
+      );
+      expect(eventsGateway.emitMessageAck).toHaveBeenCalledWith('sess-uuid-1', {
+        messageId: 'wa-msg-1',
+        ack: 2,
+        ackName: 'delivered',
+      });
+      expect(hookManager.execute).toHaveBeenCalledWith(
+        'message:ack',
+        { messageId: 'wa-msg-1', ack: 2, ackName: 'delivered' },
+        { sessionId: 'sess-uuid-1', source: 'Engine' },
+      );
+      expect(webhookService.dispatch).toHaveBeenCalledWith('sess-uuid-1', 'message.ack', {
+        messageId: 'wa-msg-1',
+        ack: 2,
+        ackName: 'delivered',
+      });
     });
   });
 

@@ -17,6 +17,7 @@ import { createLogger } from '../../common/services/logger.service';
 import { EventsGateway } from '../events/events.gateway';
 import { WebhookService } from '../webhook/webhook.service';
 import { HookManager } from '../../core/hooks';
+import { Message, MessageStatus } from '../message/entities/message.entity';
 
 interface ReconnectState {
   attempts: number;
@@ -38,6 +39,8 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
   constructor(
     @InjectRepository(Session)
     private readonly sessionRepository: Repository<Session>,
+    @InjectRepository(Message)
+    private readonly messageRepository: Repository<Message>,
     @InjectDataSource()
     private readonly dataSource: DataSource,
     private readonly engineFactory: EngineFactory,
@@ -352,6 +355,9 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
               this.eventsGateway.emitMessage(id, finalMessage);
             });
         },
+        onMessageAck: (messageId: string, ack: number): void => {
+          void this.handleMessageAck(id, messageId, ack);
+        },
         onDisconnected: (reason: string): void => {
           this.logger.warn(`Session disconnected: ${reason}`, {
             sessionId: id,
@@ -403,6 +409,67 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
       }
       await this.updateStatus(id, SessionStatus.FAILED);
       throw error;
+    }
+  }
+
+  private async handleMessageAck(sessionId: string, messageId: string, ack: number): Promise<void> {
+    const ackName = this.getAckName(ack);
+    const status = this.getStatusFromAck(ack);
+    const payload = { messageId, ack, ackName };
+
+    if (status) {
+      await this.messageRepository.update({ sessionId, waMessageId: messageId }, { status });
+    }
+
+    this.eventsGateway.emitMessageAck(sessionId, payload);
+
+    await this.hookManager.execute('message:ack', payload, {
+      sessionId,
+      source: 'Engine',
+    });
+
+    await this.webhookService.dispatch(sessionId, 'message.ack', payload);
+
+    const logContext = {
+      sessionId,
+      messageId,
+      ack,
+      ackName,
+      status,
+      action: 'message_ack',
+    };
+
+    if (ack < 0) {
+      this.logger.warn(`Message acknowledgment failed: ${ackName}`, logContext);
+    } else {
+      this.logger.debug(`Message acknowledgment received: ${ackName}`, logContext);
+    }
+  }
+
+  private getStatusFromAck(ack: number): MessageStatus | null {
+    if (ack < 0) return MessageStatus.FAILED;
+    if (ack >= 3) return MessageStatus.READ;
+    if (ack >= 2) return MessageStatus.DELIVERED;
+    if (ack >= 1) return MessageStatus.SENT;
+    return null;
+  }
+
+  private getAckName(ack: number): string {
+    switch (ack) {
+      case -1:
+        return 'error';
+      case 0:
+        return 'pending';
+      case 1:
+        return 'server';
+      case 2:
+        return 'delivered';
+      case 3:
+        return 'read';
+      case 4:
+        return 'played';
+      default:
+        return 'unknown';
     }
   }
 
