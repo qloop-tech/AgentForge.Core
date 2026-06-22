@@ -251,6 +251,23 @@ describe('SessionService', () => {
         expect.any(Object),
       );
     });
+
+    it('should clean up failed engine initialization so the session can be started again', async () => {
+      const session = createMockSession();
+      (repository.findOne as jest.Mock).mockResolvedValue(session);
+      (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+      mockEngine.initialize.mockRejectedValueOnce(new Error('browser bootstrap failed')).mockResolvedValueOnce(undefined);
+
+      await expect(service.start('sess-uuid-1')).rejects.toThrow('browser bootstrap failed');
+
+      expect(service.getActiveCount()).toBe(0);
+      expect(mockEngine.destroy).toHaveBeenCalled();
+
+      await service.start('sess-uuid-1');
+
+      expect(mockEngine.initialize).toHaveBeenCalledTimes(2);
+      expect(service.getActiveCount()).toBe(1);
+    });
   });
 
   // ── stop ──────────────────────────────────────────────────────────

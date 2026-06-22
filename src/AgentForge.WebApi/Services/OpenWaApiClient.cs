@@ -50,9 +50,12 @@ public sealed class OpenWaApiClient(
         switch (session.Status?.Trim().ToUpperInvariant())
         {
             case "CONNECTED":
+            case "READY":
             case "CONNECTING":
+            case "AUTHENTICATING":
                 return;
             case "SCAN_QR":
+            case "QR_READY":
             case "INITIALIZING":
                 logger.LogInformation("OpenWA default session is waiting for QR onboarding. Status: {Status}", session.Status);
                 return;
@@ -131,9 +134,8 @@ public sealed class OpenWaApiClient(
             }
 
             logger.LogWarning(
-                "Configured OPENWA_SESSION_NAME '{SessionName}' was not found. Create or connect this session in OpenWA.",
+                "Configured OPENWA_SESSION_NAME '{SessionName}' was not found. Falling back to the first available OpenWA session.",
                 configuredSessionName);
-            return null;
         }
 
         return sessions.FirstOrDefault(session =>

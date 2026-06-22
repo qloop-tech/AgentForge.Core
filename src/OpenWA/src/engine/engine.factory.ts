@@ -69,6 +69,13 @@ export class EngineFactory implements OnModuleInit {
         sessionId: options.sessionId,
         proxyUrl: options.proxyUrl,
         proxyType: options.proxyType,
+        sessionDataPath: this.configService.get<string>('engine.sessionDataPath') ?? './data/sessions',
+        headless: this.configService.get<boolean>('engine.puppeteer.headless') ?? true,
+        executablePath: this.configService.get<string>('engine.puppeteer.executablePath'),
+        puppeteerArgs: this.configService.get<string[]>('engine.puppeteer.args') ?? [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+        ],
       }) as IWhatsAppEngine;
     }
 
@@ -98,6 +105,7 @@ export class EngineFactory implements OnModuleInit {
       sessionDataPath: this.configService.get<string>('engine.sessionDataPath') ?? './data/sessions',
       puppeteer: {
         headless: this.configService.get<boolean>('engine.puppeteer.headless') ?? true,
+        executablePath: this.configService.get<string>('engine.puppeteer.executablePath'),
         args: this.configService.get<string[]>('engine.puppeteer.args') ?? ['--no-sandbox', '--disable-setuid-sandbox'],
       },
       proxy: options.proxyUrl
