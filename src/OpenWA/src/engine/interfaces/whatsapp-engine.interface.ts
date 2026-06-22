@@ -254,6 +254,7 @@ export interface IWhatsAppEngine {
   getContacts(): Promise<Contact[]>;
   getContactById(contactId: string): Promise<Contact | null>;
   checkNumberExists(number: string): Promise<boolean>;
+  resolveNumberId(number: string): Promise<string | null>;
 
   // Groups - Basic
   getGroups(): Promise<Group[]>;

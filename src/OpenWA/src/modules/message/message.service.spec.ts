@@ -24,6 +24,7 @@ function createMockEngine() {
     reactToMessage: jest.fn().mockResolvedValue(undefined),
     getMessageReactions: jest.fn().mockResolvedValue([]),
     deleteMessage: jest.fn().mockResolvedValue(undefined),
+    resolveNumberId: jest.fn().mockResolvedValue(null),
   };
 }
 
@@ -49,10 +50,10 @@ describe('MessageService', () => {
     };
 
     hookManager = {
-      execute: jest.fn().mockResolvedValue({
+      execute: jest.fn().mockImplementation(async (_hook: string, data: unknown) => ({
         continue: true,
-        data: { sessionId: 'sess-1', input: { chatId: '628123456789@c.us', text: 'Hello' }, type: 'text' },
-      }),
+        data,
+      })),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -99,6 +100,24 @@ describe('MessageService', () => {
       );
       // save called twice: once for initial pending, once for status update to sent
       expect(repository.save).toHaveBeenCalledTimes(2);
+    });
+
+    it('should resolve direct chat IDs before sending', async () => {
+      mockEngine.resolveNumberId.mockResolvedValueOnce('123456789@lid');
+
+      await service.sendText('sess-1', {
+        chatId: '628123456789@c.us',
+        text: 'Hello',
+      });
+
+      expect(mockEngine.resolveNumberId).toHaveBeenCalledWith('628123456789');
+      expect(mockEngine.sendTextMessage).toHaveBeenCalledWith('123456789@lid', 'Hello');
+      expect(repository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          chatId: '123456789@lid',
+          to: '123456789@lid',
+        }),
+      );
     });
 
     it('should execute message:sending and message:sent hooks', async () => {

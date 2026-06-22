@@ -34,7 +34,7 @@ export class MessageService {
       chatId: finalDto.chatId,
       body: finalDto.text,
       type: 'text',
-    }, engine => engine.sendTextMessage(finalDto.chatId, finalDto.text));
+    }, (engine, chatId) => engine.sendTextMessage(chatId, finalDto.text));
   }
 
   async sendImage(sessionId: string, dto: SendMediaMessageDto): Promise<MessageResponseDto> {
@@ -44,7 +44,7 @@ export class MessageService {
       chatId: finalDto.chatId,
       body: finalDto.caption || '',
       type: 'image',
-    }, engine => engine.sendImageMessage(finalDto.chatId, media));
+    }, (engine, chatId) => engine.sendImageMessage(chatId, media));
   }
 
   async sendVideo(sessionId: string, dto: SendMediaMessageDto): Promise<MessageResponseDto> {
@@ -54,7 +54,7 @@ export class MessageService {
       chatId: finalDto.chatId,
       body: finalDto.caption || '',
       type: 'video',
-    }, engine => engine.sendVideoMessage(finalDto.chatId, media));
+    }, (engine, chatId) => engine.sendVideoMessage(chatId, media));
   }
 
   async sendAudio(sessionId: string, dto: SendMediaMessageDto): Promise<MessageResponseDto> {
@@ -63,7 +63,7 @@ export class MessageService {
     return this.sendWithPersistence(sessionId, 'audio', finalDto, {
       chatId: finalDto.chatId,
       type: 'audio',
-    }, engine => engine.sendAudioMessage(finalDto.chatId, media));
+    }, (engine, chatId) => engine.sendAudioMessage(chatId, media));
   }
 
   async sendDocument(sessionId: string, dto: SendMediaMessageDto): Promise<MessageResponseDto> {
@@ -73,7 +73,7 @@ export class MessageService {
       chatId: finalDto.chatId,
       body: finalDto.filename || '',
       type: 'document',
-    }, engine => engine.sendDocumentMessage(finalDto.chatId, media));
+    }, (engine, chatId) => engine.sendDocumentMessage(chatId, media));
   }
 
   /**
@@ -111,8 +111,8 @@ export class MessageService {
       chatId: finalDto.chatId,
       body: finalDto.description || 'Location',
       type: 'location',
-    }, engine =>
-      engine.sendLocationMessage(finalDto.chatId, {
+    }, (engine, chatId) =>
+      engine.sendLocationMessage(chatId, {
         latitude: finalDto.latitude,
         longitude: finalDto.longitude,
         description: finalDto.description,
@@ -130,8 +130,8 @@ export class MessageService {
       chatId: finalDto.chatId,
       body: finalDto.contactName,
       type: 'contact',
-    }, engine =>
-      engine.sendContactMessage(finalDto.chatId, {
+    }, (engine, chatId) =>
+      engine.sendContactMessage(chatId, {
         name: finalDto.contactName,
         number: finalDto.contactNumber,
       }),
@@ -144,7 +144,7 @@ export class MessageService {
     return this.sendWithPersistence(sessionId, 'sticker', finalDto, {
       chatId: finalDto.chatId,
       type: 'sticker',
-    }, engine => engine.sendStickerMessage(finalDto.chatId, media));
+    }, (engine, chatId) => engine.sendStickerMessage(chatId, media));
   }
 
   async reply(
@@ -156,7 +156,7 @@ export class MessageService {
       chatId: finalDto.chatId,
       body: finalDto.text,
       type: 'text',
-    }, engine => engine.replyToMessage(finalDto.chatId, finalDto.quotedMessageId, finalDto.text));
+    }, (engine, chatId) => engine.replyToMessage(chatId, finalDto.quotedMessageId, finalDto.text));
   }
 
   async forward(
@@ -168,7 +168,7 @@ export class MessageService {
       chatId: finalDto.toChatId,
       body: '[Forwarded]',
       type: 'forward',
-    }, engine => engine.forwardMessage(finalDto.fromChatId, finalDto.toChatId, finalDto.messageId));
+    }, (engine, chatId) => engine.forwardMessage(finalDto.fromChatId, chatId, finalDto.messageId));
   }
 
   /**
@@ -202,13 +202,15 @@ export class MessageService {
     type: string,
     input: TInput,
     outgoing: OutgoingMessageInput,
-    send: (engine: IWhatsAppEngine) => Promise<MessageResult>,
+    send: (engine: IWhatsAppEngine, chatId: string) => Promise<MessageResult>,
   ): Promise<MessageResponseDto> {
     const engine = this.getEngine(sessionId);
-    const message = await this.saveOutgoingMessage(sessionId, outgoing);
+    const resolvedChatId = await this.resolveOutboundChatId(engine, outgoing.chatId);
+    const resolvedOutgoing = { ...outgoing, chatId: resolvedChatId };
+    const message = await this.saveOutgoingMessage(sessionId, resolvedOutgoing);
 
     try {
-      const result = await send(engine);
+      const result = await send(engine, resolvedChatId);
 
       message.waMessageId = result.id;
       message.status = MessageStatus.SENT;
@@ -236,6 +238,19 @@ export class MessageService {
 
       throw error;
     }
+  }
+
+  private async resolveOutboundChatId(engine: IWhatsAppEngine, chatId: string): Promise<string> {
+    if (chatId.endsWith('@g.us') || chatId.endsWith('@lid')) {
+      return chatId;
+    }
+
+    const number = chatId.replace(/@c\.us$/, '').replace(/[^0-9]/g, '');
+    if (!number) {
+      return chatId;
+    }
+
+    return (await engine.resolveNumberId(number)) ?? chatId;
   }
 
   /**

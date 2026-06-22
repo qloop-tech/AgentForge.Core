@@ -426,9 +426,13 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   }
 
   async checkNumberExists(number: string): Promise<boolean> {
+    return (await this.resolveNumberId(number)) !== null;
+  }
+
+  async resolveNumberId(number: string): Promise<string | null> {
     this.ensureReady();
     const numberId = await this.client!.getNumberId(number);
-    return numberId !== null;
+    return numberId?._serialized ?? null;
   }
 
   async getGroups(): Promise<Group[]> {

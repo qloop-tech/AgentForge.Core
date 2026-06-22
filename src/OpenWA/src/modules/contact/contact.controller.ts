@@ -68,11 +68,11 @@ export class ContactController {
     if (!engine) {
       throw new BadRequestException('Session is not started');
     }
-    const exists = await engine.checkNumberExists(number);
+    const whatsappId = await engine.resolveNumberId(number);
     return {
       number,
-      exists,
-      whatsappId: exists ? `${number}@c.us` : null,
+      exists: whatsappId !== null,
+      whatsappId,
     };
   }
 
