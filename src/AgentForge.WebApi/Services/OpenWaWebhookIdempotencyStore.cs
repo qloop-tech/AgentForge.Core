@@ -1,43 +1,39 @@
-using System.Collections.Concurrent;
+using StackExchange.Redis;
 
 namespace AgentForge.WebApi.Services;
 
-public sealed class OpenWaWebhookIdempotencyStore
+public sealed class OpenWaWebhookIdempotencyStore(IConnectionMultiplexer redis)
 {
     private static readonly TimeSpan Retention = TimeSpan.FromMinutes(30);
-    private static readonly TimeSpan CleanupInterval = TimeSpan.FromMinutes(5);
+    private readonly IDatabase _database = redis.GetDatabase();
 
-    private readonly ConcurrentDictionary<string, DateTimeOffset> _entries = new(StringComparer.Ordinal);
-    private long _nextCleanupTicks = DateTimeOffset.UtcNow.Add(CleanupInterval).UtcTicks;
-
-    public bool TryRegister(string? key)
+    public async Task<bool> TryRegisterAsync(string? key, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(key))
         {
             return true;
         }
 
-        var now = DateTimeOffset.UtcNow;
-        CleanupExpired(now);
+        cancellationToken.ThrowIfCancellationRequested();
 
-        return _entries.TryAdd(key, now.Add(Retention));
+        return await _database.StringSetAsync(
+                ToRedisKey(key),
+                DateTimeOffset.UtcNow.ToString("O"),
+                Retention,
+                When.NotExists)
+            .ConfigureAwait(false);
     }
 
-    private void CleanupExpired(DateTimeOffset now)
+    public async Task RemoveAsync(string? key)
     {
-        if (now.UtcTicks < Interlocked.Read(ref _nextCleanupTicks))
+        if (string.IsNullOrWhiteSpace(key))
         {
             return;
         }
 
-        foreach (var entry in _entries)
-        {
-            if (entry.Value <= now)
-            {
-                _entries.TryRemove(entry.Key, out _);
-            }
-        }
-
-        Interlocked.Exchange(ref _nextCleanupTicks, now.Add(CleanupInterval).UtcTicks);
+        await _database.KeyDeleteAsync(ToRedisKey(key)).ConfigureAwait(false);
     }
+
+    private static string ToRedisKey(string key)
+        => $"agentforge:openwa:webhook:dedupe:{key}";
 }

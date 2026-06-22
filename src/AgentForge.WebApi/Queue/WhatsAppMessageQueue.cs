@@ -1,60 +1,232 @@
-using System.Threading.Channels;
+using StackExchange.Redis;
 
 namespace AgentForge.WebApi.Queue;
 
-/// <summary>
-/// Bounded channel-backed queue for incoming WhatsApp messages.
-/// The webhook endpoint enqueues messages instantly (fast 200 OK to the provider),
-/// while this background service processes them sequentially, one per-scope.
-/// Replaces the previous fire-and-forget <c>Task.Run</c> pattern, providing:
-/// - Backpressure (drops oldest when capacity is exceeded)
-/// - Proper app-shutdown coordination via <paramref name="stoppingToken"/>
-/// - One <see cref="IServiceScope"/> per message so scoped services are resolved correctly
-/// </summary>
 public sealed class WhatsAppMessageQueue(
+    IConnectionMultiplexer redis,
     IServiceScopeFactory scopeFactory,
+    IConfiguration configuration,
     ILogger<WhatsAppMessageQueue> logger) : BackgroundService
 {
-    private readonly Channel<(string Phone, string Body)> _channel =
-        Channel.CreateBounded<(string Phone, string Body)>(new BoundedChannelOptions(200)
-        {
-            FullMode = BoundedChannelFullMode.DropOldest,
-            SingleReader = true,
-            SingleWriter = false,
-        });
+    private const string StreamName = "agentforge:whatsapp:incoming";
+    private const string DeadLetterStreamName = "agentforge:whatsapp:incoming:dead";
+    private const string ConsumerGroup = "agentforge-webapi";
+    private static readonly TimeSpan IdleDelay = TimeSpan.FromMilliseconds(750);
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan PhoneLockExpiry = TimeSpan.FromMinutes(5);
 
-    /// <summary>Enqueues a message for processing. Never throws — logs and drops when full.</summary>
-    public bool TryEnqueue(string phone, string body)
+    private readonly IDatabase _database = redis.GetDatabase();
+    private readonly string _consumerName = $"{Environment.MachineName}-{Environment.ProcessId}";
+    private readonly int _maxAttempts = Math.Max(1, configuration.GetValue("WHATSAPP_QUEUE_MAX_ATTEMPTS", 5));
+
+    public async Task EnqueueAsync(
+        string phone,
+        string body,
+        string? dedupeKey,
+        string? deliveryId,
+        CancellationToken cancellationToken = default)
     {
-        if (_channel.Writer.TryWrite((phone, body)))
-            return true;
+        cancellationToken.ThrowIfCancellationRequested();
 
-        logger.LogWarning("WhatsAppMessageQueue is full — dropping message from {Phone}", phone);
-        return false;
+        await _database.StreamAddAsync(
+                StreamName,
+                [
+                    new NameValueEntry("phone", phone),
+                    new NameValueEntry("body", body),
+                    new NameValueEntry("dedupeKey", dedupeKey ?? string.Empty),
+                    new NameValueEntry("deliveryId", deliveryId ?? string.Empty),
+                    new NameValueEntry("receivedAt", DateTimeOffset.UtcNow.ToString("O")),
+                    new NameValueEntry("attempts", 0),
+                ])
+            .ConfigureAwait(false);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("WhatsAppMessageQueue started");
+        await EnsureConsumerGroupAsync().ConfigureAwait(false);
+        logger.LogInformation("WhatsApp Redis Streams queue started as consumer {Consumer}", _consumerName);
 
-        await foreach (var (phone, body) in _channel.Reader.ReadAllAsync(stoppingToken).ConfigureAwait(false))
+        while (!stoppingToken.IsCancellationRequested)
         {
-            try
+            var entries = await ReadNextBatchAsync(stoppingToken).ConfigureAwait(false);
+            if (entries.Length == 0)
             {
-                await using var scope = scopeFactory.CreateAsyncScope();
-                var agentChat = scope.ServiceProvider.GetRequiredService<AgentChatService>();
-                await agentChat.HandleAsync(phone, body, stoppingToken).ConfigureAwait(false);
+                await Task.Delay(IdleDelay, stoppingToken).ConfigureAwait(false);
+                continue;
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+
+            foreach (var entry in entries)
             {
-                break;
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error handling WhatsApp message from {Phone}", phone);
+                await ProcessEntryAsync(entry, stoppingToken).ConfigureAwait(false);
             }
         }
 
-        logger.LogInformation("WhatsAppMessageQueue stopped");
+        logger.LogInformation("WhatsApp Redis Streams queue stopped");
+    }
+
+    private async Task EnsureConsumerGroupAsync()
+    {
+        try
+        {
+            await _database.StreamCreateConsumerGroupAsync(StreamName, ConsumerGroup, "0-0", createStream: true)
+                .ConfigureAwait(false);
+        }
+        catch (RedisServerException ex) when (ex.Message.Contains("BUSYGROUP", StringComparison.OrdinalIgnoreCase))
+        {
+            // The group already exists.
+        }
+    }
+
+    private async Task<StreamEntry[]> ReadNextBatchAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var pendingForConsumer = await _database.StreamReadGroupAsync(
+                StreamName,
+                ConsumerGroup,
+                _consumerName,
+                "0-0",
+                count: 10)
+            .ConfigureAwait(false);
+
+        if (pendingForConsumer.Length > 0)
+        {
+            return pendingForConsumer;
+        }
+
+        return await _database.StreamReadGroupAsync(
+                StreamName,
+                ConsumerGroup,
+                _consumerName,
+                ">",
+                count: 10)
+            .ConfigureAwait(false);
+    }
+
+    private async Task ProcessEntryAsync(StreamEntry entry, CancellationToken cancellationToken)
+    {
+        var message = WhatsAppQueueMessage.FromStreamEntry(entry);
+        var lockKey = $"agentforge:whatsapp:lock:{message.Phone}";
+        var lockValue = _consumerName;
+
+        while (!await _database.StringSetAsync(lockKey, lockValue, PhoneLockExpiry, When.NotExists).ConfigureAwait(false))
+        {
+            await Task.Delay(IdleDelay, cancellationToken).ConfigureAwait(false);
+        }
+
+        try
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var agentChat = scope.ServiceProvider.GetRequiredService<AgentChatService>();
+            await agentChat.HandleAsync(message.Phone, message.Body, cancellationToken).ConfigureAwait(false);
+
+            await AcknowledgeAsync(entry.Id).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await HandleFailureAsync(entry.Id, message, ex).ConfigureAwait(false);
+        }
+        finally
+        {
+            await ReleasePhoneLockAsync(lockKey, lockValue).ConfigureAwait(false);
+        }
+    }
+
+    private async Task HandleFailureAsync(RedisValue messageId, WhatsAppQueueMessage message, Exception ex)
+    {
+        var nextAttempt = message.Attempts + 1;
+        if (nextAttempt >= _maxAttempts)
+        {
+            await _database.StreamAddAsync(
+                    DeadLetterStreamName,
+                    message.ToNameValueEntries(nextAttempt, ex.Message))
+                .ConfigureAwait(false);
+            await AcknowledgeAsync(messageId).ConfigureAwait(false);
+            logger.LogError(
+                ex,
+                "Dead-lettered WhatsApp message from {Phone} after {Attempts} attempts",
+                message.Phone,
+                nextAttempt);
+            return;
+        }
+
+        logger.LogWarning(
+            ex,
+            "WhatsApp message processing failed for {Phone}; retrying attempt {Attempt}/{MaxAttempts}",
+            message.Phone,
+            nextAttempt + 1,
+            _maxAttempts);
+
+        await Task.Delay(RetryDelay).ConfigureAwait(false);
+        await _database.StreamAddAsync(
+                StreamName,
+                message.ToNameValueEntries(nextAttempt, ex.Message))
+            .ConfigureAwait(false);
+        await AcknowledgeAsync(messageId).ConfigureAwait(false);
+    }
+
+    private async Task AcknowledgeAsync(RedisValue messageId)
+    {
+        await _database.StreamAcknowledgeAsync(StreamName, ConsumerGroup, messageId).ConfigureAwait(false);
+        await _database.StreamDeleteAsync(StreamName, [messageId]).ConfigureAwait(false);
+    }
+
+    private async Task ReleasePhoneLockAsync(string key, string expectedValue)
+    {
+        const string script = """
+            if redis.call('GET', KEYS[1]) == ARGV[1] then
+              return redis.call('DEL', KEYS[1])
+            end
+            return 0
+            """;
+
+        await _database.ScriptEvaluateAsync(script, [key], [expectedValue]).ConfigureAwait(false);
+    }
+
+    private sealed record WhatsAppQueueMessage(
+        string Phone,
+        string Body,
+        string DedupeKey,
+        string DeliveryId,
+        string ReceivedAt,
+        int Attempts)
+    {
+        public static WhatsAppQueueMessage FromStreamEntry(StreamEntry entry)
+        {
+            var values = entry.Values.ToDictionary(
+                value => (string)value.Name!,
+                value => (string)value.Value!,
+                StringComparer.Ordinal);
+
+            return new WhatsAppQueueMessage(
+                Get(values, "phone"),
+                Get(values, "body"),
+                Get(values, "dedupeKey"),
+                Get(values, "deliveryId"),
+                Get(values, "receivedAt"),
+                int.TryParse(Get(values, "attempts"), out var attempts) ? attempts : 0);
+        }
+
+        public NameValueEntry[] ToNameValueEntries(int attempts, string? lastError)
+        {
+            return
+            [
+                new NameValueEntry("phone", Phone),
+                new NameValueEntry("body", Body),
+                new NameValueEntry("dedupeKey", DedupeKey),
+                new NameValueEntry("deliveryId", DeliveryId),
+                new NameValueEntry("receivedAt", ReceivedAt),
+                new NameValueEntry("attempts", attempts),
+                new NameValueEntry("lastError", lastError ?? string.Empty),
+                new NameValueEntry("lastFailedAt", DateTimeOffset.UtcNow.ToString("O")),
+            ];
+        }
+
+        private static string Get(IReadOnlyDictionary<string, string> values, string key)
+            => values.TryGetValue(key, out var value) ? value : string.Empty;
     }
 }

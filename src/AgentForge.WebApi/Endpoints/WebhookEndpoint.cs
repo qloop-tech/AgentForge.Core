@@ -62,12 +62,37 @@ public static class WebhookEndpoint
             return Results.Ok();
         }
 
-        if (!idempotencyStore.TryRegister(payload.GetDedupeKey()))
+        var dedupeKey = payload.GetDedupeKey();
+        try
         {
-            return Results.Ok();
+            if (!await idempotencyStore.TryRegisterAsync(dedupeKey, ct).ConfigureAwait(false))
+            {
+                return Results.Ok();
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to register OpenWA webhook dedupe key");
+            return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
         }
 
-        var message = payload.EventPayload?.Deserialize<OpenWaMessage>(JsonSerializerOptions.Web);
+        var dedupeRegistered = !string.IsNullOrWhiteSpace(dedupeKey);
+
+        OpenWaMessage? message;
+        try
+        {
+            message = payload.EventPayload?.Deserialize<OpenWaMessage>(JsonSerializerOptions.Web);
+        }
+        catch (JsonException ex)
+        {
+            logger.LogWarning(ex, "Received OpenWA message webhook with an invalid message payload");
+            if (dedupeRegistered)
+            {
+                await idempotencyStore.RemoveAsync(dedupeKey).ConfigureAwait(false);
+            }
+
+            return Results.BadRequest("Invalid message payload.");
+        }
         var phoneNumber = message?.GetSender();
         var body = message?.GetBody();
         if (message is null || message.FromMe == true || string.IsNullOrWhiteSpace(phoneNumber) || string.IsNullOrWhiteSpace(body))
@@ -75,9 +100,20 @@ public static class WebhookEndpoint
             return Results.Ok();
         }
 
-        // Enqueue for background processing — webhook must return 200 quickly.
-        // The queue serialises processing, provides backpressure, and respects app shutdown.
-        messageQueue.TryEnqueue(phoneNumber, body);
+        try
+        {
+            await messageQueue.EnqueueAsync(phoneNumber, body, dedupeKey, payload.DeliveryId, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            if (dedupeRegistered)
+            {
+                await idempotencyStore.RemoveAsync(dedupeKey).ConfigureAwait(false);
+            }
+
+            logger.LogError(ex, "Failed to enqueue OpenWA webhook message from {Phone}", phoneNumber);
+            return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
 
         return Results.Ok();
     }
