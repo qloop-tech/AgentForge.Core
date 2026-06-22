@@ -83,10 +83,12 @@ var webhookApi = builder.AddProject<AgentForge_WebApi>("webhook")
     .WithReference(openWaEndpoint)
     .WithReference(mcpServer)
     .WithReference(aiFoundry)
+    .WithReference(openWaRedis)
     .WithEnvironment("OPENWA_API_KEY", openWaApiKey)
     .WithEnvironment("OPENWA_WEBHOOK_SECRET", openWaWebhookSecret)
     .WithEnvironment("OPENWA_SESSION_NAME", "travel-bot")
     .WaitFor(openWa)
+    .WaitFor(openWaRedis)
     .WaitFor(mcpServer)
     .WithLocalVerticalInputs(localParameters);
 webhookApi.WithPublishVerticalRuntime(settings, "webhook");

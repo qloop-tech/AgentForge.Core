@@ -48,6 +48,7 @@ builder.Services.AddHttpClient("mcpserver", client =>
 // ─── Azure OpenAI Chat Client ─────────────────────────────────────────────────
 builder.AddAzureChatCompletionsClient(connectionName: "ai-foundry")
     .AddChatClient("gpt-5.4-mini");
+builder.AddRedisClient("openwa-redis");
 
 builder.Services.AddSingleton<IMessageSender, OpenWaMessageSender>();
 
