@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -35,19 +35,15 @@ export interface WebhookJobData {
 @Injectable()
 export class WebhookService {
   private readonly logger = createLogger('WebhookService');
-  private readonly queueEnabled: boolean;
 
   constructor(
     @InjectRepository(Webhook)
     private readonly webhookRepository: Repository<Webhook>,
     private readonly configService: ConfigService,
     private readonly hookManager: HookManager,
-    @Optional()
     @InjectQueue(QUEUE_NAMES.WEBHOOK)
-    private readonly webhookQueue?: Queue<WebhookJobData>,
-  ) {
-    this.queueEnabled = configService.get<boolean>('queue.enabled', false);
-  }
+    private readonly webhookQueue: Queue<WebhookJobData>,
+  ) {}
 
   async create(sessionId: string, dto: CreateWebhookDto): Promise<Webhook> {
     const webhook = this.webhookRepository.create({
@@ -205,151 +201,57 @@ export class WebhookService {
         ...webhook.headers,
       };
 
-      // Use queue if available, otherwise fallback to direct delivery
-      if (this.queueEnabled && this.webhookQueue) {
-        const signature = webhook.secret ? this.generateSignature(JSON.stringify(finalPayload), webhook.secret) : '';
+      const signature = webhook.secret ? this.generateSignature(JSON.stringify(finalPayload), webhook.secret) : '';
 
-        if (webhook.secret) {
-          headers['X-OpenWA-Signature'] = signature;
-        }
-
-        const jobData: WebhookJobData = {
-          webhookId: webhook.id,
-          url: webhook.url,
-          event,
-          payload: finalPayload,
-          signature,
-          headers,
-          attempt: 1,
-          maxRetries: webhook.retryCount,
-        };
-
-        try {
-          await this.webhookQueue.add(`webhook-${webhook.id}`, jobData, {
-            attempts: webhook.retryCount,
-            backoff: {
-              type: 'exponential',
-              delay: this.configService.get<number>('webhook.retryDelay', 5000),
-            },
-          });
-
-          // Execute hook after successful queue (NOT delivery - that happens in processor)
-          await this.hookManager.execute(
-            'webhook:queued',
-            { sessionId, event, webhookId: webhook.id, deliveryId },
-            { sessionId, source: 'WebhookService' },
-          );
-
-          this.logger.debug(`Webhook job queued for ${webhook.id}`, {
-            webhookId: webhook.id,
-            event,
-            idempotencyKey,
-            deliveryId,
-            action: 'webhook_queued',
-          });
-        } catch (error) {
-          // Execute hook on queue error (not delivery error - that happens in processor)
-          await this.hookManager.execute(
-            'webhook:error',
-            { sessionId, event, webhookId: webhook.id, error: `Queue failed: ${String(error)}` },
-            { sessionId, source: 'WebhookService' },
-          );
-
-          this.logger.error(`Failed to queue webhook ${webhook.id}`, String(error), {
-            webhookId: webhook.id,
-            action: 'webhook_queue_failed',
-          });
-        }
-      } else {
-        // Direct delivery when queue is disabled
-        try {
-          await this.deliverWebhook(webhook, finalPayload, headers);
-
-          // Execute hook after successful delivery
-          await this.hookManager.execute(
-            'webhook:delivered',
-            { sessionId, event, webhookId: webhook.id, deliveryId },
-            { sessionId, source: 'WebhookService' },
-          );
-
-          // Legacy hook for backward compatibility
-          await this.hookManager.execute(
-            'webhook:after',
-            { sessionId, event, webhookId: webhook.id, success: true },
-            { sessionId, source: 'WebhookService' },
-          );
-        } catch (error) {
-          // Execute hook on error
-          await this.hookManager.execute(
-            'webhook:error',
-            { sessionId, event, webhookId: webhook.id, error: String(error) },
-            { sessionId, source: 'WebhookService' },
-          );
-
-          this.logger.error(`Failed to deliver webhook ${webhook.id}`, String(error), {
-            webhookId: webhook.id,
-            action: 'webhook_delivery_failed',
-          });
-        }
+      if (webhook.secret) {
+        headers['X-OpenWA-Signature'] = signature;
       }
-    }
-  }
 
-  /**
-   * @deprecated Use job queue dispatch instead. This is kept for fallback.
-   */
-  private async deliverWebhook(
-    webhook: Webhook,
-    payload: WebhookPayload,
-    headers: Record<string, string>,
-    attempt = 1,
-  ): Promise<void> {
-    const body = JSON.stringify(payload);
-
-    // Update retry count header
-    headers['X-OpenWA-Retry-Count'] = String(attempt - 1);
-
-    // Add signature if secret is configured and not already present
-    if (webhook.secret && !headers['X-OpenWA-Signature']) {
-      headers['X-OpenWA-Signature'] = this.generateSignature(body, webhook.secret);
-    }
-
-    try {
-      const response = await fetch(webhook.url, {
-        method: 'POST',
+      const jobData: WebhookJobData = {
+        webhookId: webhook.id,
+        url: webhook.url,
+        event,
+        payload: finalPayload,
+        signature,
         headers,
-        body,
-        signal: AbortSignal.timeout(this.configService.get<number>('webhook.timeout', 10000)),
-      });
+        attempt: 1,
+        maxRetries: webhook.retryCount,
+      };
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      try {
+        await this.webhookQueue.add(`webhook-${webhook.id}`, jobData, {
+          attempts: webhook.retryCount,
+          backoff: {
+            type: 'exponential',
+            delay: this.configService.get<number>('webhook.retryDelay', 5000),
+          },
+        });
+
+        await this.hookManager.execute(
+          'webhook:queued',
+          { sessionId, event, webhookId: webhook.id, deliveryId },
+          { sessionId, source: 'WebhookService' },
+        );
+
+        this.logger.debug(`Webhook job queued for ${webhook.id}`, {
+          webhookId: webhook.id,
+          event,
+          idempotencyKey,
+          deliveryId,
+          action: 'webhook_queued',
+        });
+      } catch (error) {
+        await this.hookManager.execute(
+          'webhook:error',
+          { sessionId, event, webhookId: webhook.id, error: `Queue failed: ${String(error)}` },
+          { sessionId, source: 'WebhookService' },
+        );
+
+        this.logger.error(`Failed to queue webhook ${webhook.id}`, String(error), {
+          webhookId: webhook.id,
+          action: 'webhook_queue_failed',
+        });
       }
-
-      // Update last triggered timestamp
-      await this.webhookRepository.update(webhook.id, {
-        lastTriggeredAt: new Date(),
-      });
-
-      this.logger.debug(`Webhook delivered to ${webhook.id}`, {
-        webhookId: webhook.id,
-        deliveryId: payload.deliveryId,
-        action: 'webhook_delivered',
-      });
-    } catch (error) {
-      this.logger.error(`Webhook delivery failed for ${webhook.id}`, String(error), {
-        webhookId: webhook.id,
-        attempt,
-        deliveryId: payload.deliveryId,
-        action: 'webhook_delivery_failed',
-      });
-
-      if (attempt < webhook.retryCount) {
-        const delay = this.configService.get<number>('webhook.retryDelay', 5000);
-        await this.delay(delay * attempt);
-        return this.deliverWebhook(webhook, payload, headers, attempt + 1);
-      }
-      throw error;
     }
   }
 
@@ -357,9 +259,5 @@ export class WebhookService {
     const hmac = crypto.createHmac('sha256', secret);
     hmac.update(payload);
     return `sha256=${hmac.digest('hex')}`;
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }

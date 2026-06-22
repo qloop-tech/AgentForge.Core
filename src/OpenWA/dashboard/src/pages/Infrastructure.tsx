@@ -65,14 +65,8 @@ export function Infrastructure() {
           </div>
           <dl className="status-grid">
             <div>
-              <dt>Enabled</dt>
-              <dd>{infraStatus.redis.enabled ? 'Yes' : 'No'}</dd>
-            </div>
-            <div>
-              <dt>Endpoint</dt>
-              <dd>
-                {infraStatus.redis.host}:{infraStatus.redis.port}
-              </dd>
+              <dt>Mode</dt>
+              <dd>Aspire managed</dd>
             </div>
           </dl>
         </section>
@@ -83,9 +77,7 @@ export function Infrastructure() {
               <Webhook size={20} />
               <h2>Webhook Queue</h2>
             </div>
-            <span className={`status-indicator ${infraStatus.queue.enabled ? 'connected' : 'disconnected'}`}>
-              {infraStatus.queue.enabled ? 'Enabled' : 'Disabled'}
-            </span>
+            <span className="status-indicator connected">Managed</span>
           </div>
           <dl className="status-grid">
             <div>

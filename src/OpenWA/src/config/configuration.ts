@@ -8,16 +8,6 @@ export default () => ({
     password: process.env.REDIS_PASSWORD,
   },
 
-  // Queue configuration
-  queue: {
-    enabled: process.env.QUEUE_ENABLED === 'true',
-  },
-
-  // Cache configuration
-  cache: {
-    enabled: process.env.CACHE_ENABLED === 'true',
-  },
-
   // PostgreSQL database configured by the Aspire AppHost.
   database: {
     type: 'postgres' as const,

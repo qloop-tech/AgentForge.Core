@@ -48,7 +48,6 @@ describe('WebhookService', () => {
 
     configService = {
       get: jest.fn().mockImplementation(<T>(key: string, def?: T): T | boolean | number => {
-        if (key === 'queue.enabled') return false;
         if (key === 'webhook.retryDelay') return 100;
         if (key === 'webhook.timeout') return 10000;
         return def as T;
@@ -192,26 +191,14 @@ describe('WebhookService', () => {
     });
   });
 
-  // ── dispatch (direct mode — queue disabled) ───────────────────────
+  // ── dispatch ──────────────────────────────────────────────────────
 
-  describe('dispatch (direct mode)', () => {
-    const mockFetch = jest.fn();
-
-    beforeEach(() => {
-      global.fetch = mockFetch as typeof global.fetch;
-      mockFetch.mockResolvedValue({ ok: true, status: 200 });
-    });
-
-    afterEach(() => {
-      mockFetch.mockReset();
-    });
-
-    it('should dispatch to webhooks matching the event', async () => {
+  describe('dispatch', () => {
+    it('should queue webhooks matching the event', async () => {
       const webhook = createMockWebhook({ events: ['message.received'] });
       (repository.find as jest.Mock).mockResolvedValue([webhook]);
       (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
 
-      // Mock hook to return the payload properly
       const mockPayload: WebhookPayload = {
         event: 'message.received',
         timestamp: new Date().toISOString(),
@@ -231,22 +218,31 @@ describe('WebhookService', () => {
 
       await service.dispatch('sess-1', 'message.received', { from: '628123456789@c.us' });
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        'https://example.com/webhook',
-        expect.objectContaining({ method: 'POST' }),
+      expect(webhookQueue.add).toHaveBeenCalledWith(
+        expect.stringContaining('webhook-'),
+        expect.objectContaining({
+          webhookId: 'wh-uuid-1',
+          url: 'https://example.com/webhook',
+          event: 'message.received',
+          payload: mockPayload,
+        }),
+        expect.objectContaining({
+          attempts: 3,
+          backoff: expect.objectContaining({ type: 'exponential' }),
+        }),
       );
     });
 
-    it('should NOT dispatch to webhooks that do not match the event', async () => {
+    it('should NOT queue webhooks that do not match the event', async () => {
       const webhook = createMockWebhook({ events: ['message.received'] });
       (repository.find as jest.Mock).mockResolvedValue([webhook]);
 
       await service.dispatch('sess-1', 'session.ready', { phone: '628123456789' });
 
-      expect(mockFetch).not.toHaveBeenCalled();
+      expect(webhookQueue.add).not.toHaveBeenCalled();
     });
 
-    it('should dispatch to webhooks with wildcard (*) event filter', async () => {
+    it('should queue webhooks with wildcard (*) event filter', async () => {
       const webhook = createMockWebhook({ events: ['*'] });
       (repository.find as jest.Mock).mockResolvedValue([webhook]);
       (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
@@ -270,10 +266,18 @@ describe('WebhookService', () => {
 
       await service.dispatch('sess-1', 'anything.goes', {});
 
-      expect(mockFetch).toHaveBeenCalled();
+      expect(webhookQueue.add).toHaveBeenCalledWith(
+        expect.stringContaining('webhook-'),
+        expect.objectContaining({
+          webhookId: 'wh-uuid-1',
+          event: 'anything.goes',
+          payload: wildcardPayload,
+        }),
+        expect.any(Object),
+      );
     });
 
-    it('should skip dispatch when plugin cancels via hook', async () => {
+    it('should skip queue when plugin cancels via hook', async () => {
       const webhook = createMockWebhook({ events: ['message.received'] });
       (repository.find as jest.Mock).mockResolvedValue([webhook]);
 
@@ -281,7 +285,7 @@ describe('WebhookService', () => {
 
       await service.dispatch('sess-1', 'message.received', {});
 
-      expect(mockFetch).not.toHaveBeenCalled();
+      expect(webhookQueue.add).not.toHaveBeenCalled();
     });
   });
 
@@ -295,13 +299,6 @@ describe('WebhookService', () => {
       });
       (repository.find as jest.Mock).mockResolvedValue([webhook]);
       (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
-
-      const capturedHeaders: Record<string, string> = {};
-      const mockFetch = jest.fn().mockImplementation((_url: string, opts: RequestInit) => {
-        Object.assign(capturedHeaders, opts.headers as Record<string, string>);
-        return Promise.resolve({ ok: true, status: 200 });
-      });
-      global.fetch = mockFetch as typeof global.fetch;
 
       const sigPayload: WebhookPayload = {
         event: 'message.received',
@@ -322,6 +319,13 @@ describe('WebhookService', () => {
 
       await service.dispatch('sess-1', 'message.received', {});
 
+      const [, jobData] = webhookQueue.add.mock.calls[0] as [
+        string,
+        { headers: Record<string, string> },
+        unknown,
+      ];
+      const capturedHeaders = jobData.headers;
+
       // Verify signature format
       expect(capturedHeaders['X-OpenWA-Signature']).toMatch(/^sha256=[a-f0-9]{64}$/);
 
@@ -336,72 +340,6 @@ describe('WebhookService', () => {
       });
       const expected = `sha256=${crypto.createHmac('sha256', 'test-secret-123').update(body).digest('hex')}`;
       expect(capturedHeaders['X-OpenWA-Signature']).toBe(expected);
-
-      mockFetch.mockReset();
-    });
-  });
-
-  // ── dispatch (queue mode) ─────────────────────────────────────────
-
-  describe('dispatch (queue mode)', () => {
-    it('should add job to queue when queue is enabled', async () => {
-      // Create a new service with queue enabled
-      const queueModule: TestingModule = await Test.createTestingModule({
-        providers: [
-          WebhookService,
-          { provide: getRepositoryToken(Webhook), useValue: repository },
-          {
-            provide: ConfigService,
-            useValue: {
-              get: jest.fn().mockImplementation(<T>(key: string, def?: T): T | boolean | number => {
-                if (key === 'queue.enabled') return true;
-                if (key === 'webhook.retryDelay') return 5000;
-                return def as T;
-              }),
-            },
-          },
-          { provide: HookManager, useValue: hookManager },
-          { provide: getQueueToken(QUEUE_NAMES.WEBHOOK), useValue: webhookQueue },
-        ],
-      }).compile();
-
-      const queueService = queueModule.get<WebhookService>(WebhookService);
-
-      const webhook = createMockWebhook({ events: ['message.received'] });
-      (repository.find as jest.Mock).mockResolvedValue([webhook]);
-
-      const queuePayload: WebhookPayload = {
-        event: 'message.received',
-        data: {},
-        timestamp: '',
-        sessionId: 'sess-1',
-        idempotencyKey: 'k',
-        deliveryId: 'd',
-      };
-      (hookManager.execute as jest.Mock).mockResolvedValue({
-        continue: true,
-        data: {
-          sessionId: 'sess-1',
-          event: 'message.received',
-          payload: queuePayload,
-        },
-      });
-
-      await queueService.dispatch('sess-1', 'message.received', {});
-
-      expect(webhookQueue.add).toHaveBeenCalledWith(
-        expect.stringContaining('webhook-'),
-        expect.objectContaining({
-          webhookId: 'wh-uuid-1',
-          url: 'https://example.com/webhook',
-          event: 'message.received',
-        }),
-        expect.objectContaining({
-          attempts: 3,
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          backoff: expect.objectContaining({ type: 'exponential' }),
-        }),
-      );
     });
   });
 });

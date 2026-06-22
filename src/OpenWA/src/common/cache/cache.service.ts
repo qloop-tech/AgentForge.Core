@@ -31,27 +31,17 @@ const TTL = {
 export class CacheService implements OnModuleDestroy {
   private readonly logger = createLogger('CacheService');
   private redis: Redis | null = null;
-  private readonly enabled: boolean;
   private connecting = false;
   private connectionAttempts = 0;
   private readonly maxConnectionAttempts = 5;
 
-  constructor(private readonly configService: ConfigService) {
-    // Check REDIS_ENABLED env var directly, with config fallback.
-    this.enabled = process.env.REDIS_ENABLED === 'true' || configService.get<boolean>('cache.enabled', false);
-
-    this.logger.log(`CacheService: enabled=${this.enabled}, REDIS_ENABLED=${process.env.REDIS_ENABLED}`);
-
-    // Don't connect immediately - wait for Redis container to be ready
-    // Connection will be established on first use via isAvailable()
-  }
+  constructor(private readonly configService: ConfigService) {}
 
   /**
    * Try to (re)connect to Redis
    * Returns true if connection succeeded
    */
   async tryConnect(): Promise<boolean> {
-    if (!this.enabled) return false;
     if (this.connecting) return false;
     if (this.redis && (await this.ping())) return true;
 
@@ -116,8 +106,6 @@ export class CacheService implements OnModuleDestroy {
   }
 
   async isAvailable(): Promise<boolean> {
-    if (!this.enabled) return false;
-
     // If not connected, try to connect (with rate limiting)
     if (!this.redis && this.connectionAttempts < this.maxConnectionAttempts) {
       await this.tryConnect();

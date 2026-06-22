@@ -11,9 +11,8 @@ import { StorageService } from '../../common/storage/storage.service';
 
 interface InfraStatus {
   database: { connected: boolean; type: 'postgres'; host: string };
-  redis: { enabled: boolean; connected: boolean; host: string; port: number };
+  redis: { connected: boolean };
   queue: {
-    enabled: boolean;
     messages: { pending: number; completed: number; failed: number };
     webhooks: { pending: number; completed: number; failed: number };
   };
@@ -37,8 +36,6 @@ export class InfraController {
   @ApiOperation({ summary: 'Get Aspire-managed infrastructure status' })
   @ApiResponse({ status: 200, description: 'Infrastructure status' })
   async getStatus(): Promise<InfraStatus> {
-    const redisHost = this.configService.get<string>('redis.host', 'localhost');
-    const redisPort = this.configService.get<number>('redis.port', 6379);
     const storageType = this.configService.get<'local' | 's3'>('storage.type', 'local');
     const storagePath = this.configService.get<string>('storage.localPath', './data/media');
     const engineType = this.configService.get<string>('engine.type', 'whatsapp-web.js');
@@ -53,13 +50,9 @@ export class InfraController {
         host: this.configService.get<string>('database.host', 'localhost'),
       },
       redis: {
-        enabled: this.configService.get<boolean>('cache.enabled', false),
         connected: await this.cacheService.isAvailable(),
-        host: redisHost,
-        port: redisPort,
       },
       queue: {
-        enabled: this.configService.get<boolean>('queue.enabled', false),
         messages: { pending: 0, completed: 0, failed: 0 },
         webhooks: { pending: 0, completed: 0, failed: 0 },
       },
