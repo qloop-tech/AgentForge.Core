@@ -18,7 +18,6 @@
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| **@openwa/plugin-sdk** | 🔜 Planned | NPM package not yet published |
 | **Sandboxed execution** | 🔜 Planned | vm2 isolation not implemented |
 | **Permission enforcement** | ⚠️ Partial | Defined in manifest, not enforced |
 | **Built-in plugins** | 🔜 Planned | Auto-reply, Translation examples |
@@ -167,7 +166,7 @@ plugins/
 ```typescript
 // plugins/my-plugin/index.ts
 
-import { OpenWAPlugin, PluginContext, MessageEvent, HookResult } from '@openwa/plugin-sdk';
+import type { OpenWAPlugin, PluginContext, MessageEvent, HookResult } from './types';
 
 export interface MyPluginConfig {
   enabled: boolean;
@@ -260,12 +259,12 @@ export default class MyAwesomePlugin implements OpenWAPlugin<MyPluginConfig> {
 }
 ```
 
-## 19.4 Plugin SDK
+## 19.4 Plugin Interfaces
 
 ### Core Interfaces
 
 ```typescript
-// @openwa/plugin-sdk/types.ts
+// plugins/types.ts
 
 export interface OpenWAPlugin<TConfig = any> {
   name: string;
@@ -336,7 +335,7 @@ export interface HookResult {
 ### Plugin API
 
 ```typescript
-// @openwa/plugin-sdk/api.ts
+// plugins/api.ts
 
 export interface PluginAPI {
   // Sessions (requires: sessions:read/write)
@@ -380,7 +379,7 @@ export interface PluginAPI {
 ### Plugin Storage
 
 ```typescript
-// @openwa/plugin-sdk/storage.ts
+// plugins/storage.ts
 
 export interface PluginStorage {
   // Key-value storage (scoped to plugin)
@@ -696,7 +695,7 @@ interface LoadedPlugin {
 ```typescript
 // plugins/auto-reply/index.ts
 
-import { OpenWAPlugin, PluginContext, MessageEvent } from '@openwa/plugin-sdk';
+import type { OpenWAPlugin, PluginContext, MessageEvent } from './types';
 
 interface AutoReplyConfig {
   enabled: boolean;
@@ -812,7 +811,7 @@ interface CompiledRule extends AutoReplyRule {
 ```typescript
 // plugins/translation/index.ts
 
-import { OpenWAPlugin, PluginContext, MessageEvent } from '@openwa/plugin-sdk';
+import type { OpenWAPlugin, PluginContext, MessageEvent } from './types';
 
 interface TranslationConfig {
   enabled: boolean;
@@ -1118,6 +1117,6 @@ export class PluginSandbox {
 
 <div align="center">
 
-[← 18 - SDK Design](./18-sdk-design.md) · [Documentation Index](./README.md) · [Next: 20 - Community Guidelines →](./20-community-guidelines.md)
+[← 17 - Dashboard Design](./17-dashboard-design.md) · [Documentation Index](./README.md) · [Next: 20 - Community Guidelines →](./20-community-guidelines.md)
 
 </div>

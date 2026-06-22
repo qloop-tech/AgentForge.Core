@@ -25,9 +25,9 @@ timeline
                   : Stable release
 
     section v0.2.0 - Developer Tools
-        Q2 2026 : JavaScript/Node.js SDK
-                : Python SDK
-                : Docs Site
+        Q2 2026 : Docs Site
+                : Integration Examples
+                : API Collections
 
     section v0.3.0 - Observability
         Q3 2026 : Prometheus Metrics
@@ -45,7 +45,7 @@ timeline
 | v0.0.1  | MVP - Basic API             | ✅ Released |
 | v0.0.2  | Production Ready            | ✅ Released |
 | v0.1.0  | Initial Stable Release      | ✅ Released |
-| v0.2.0  | SDK & Developer Tools       | 📋 Planned  |
+| v0.2.0  | Developer Tools             | 📋 Planned  |
 | v0.3.0  | Performance & Observability | 📋 Planned  |
 | v1.0.0  | Enterprise Ready            | 📋 Planned  |
 
@@ -82,7 +82,7 @@ Examples:
 0.0.2 - Production Ready (Multi-session, Dashboard)
 0.1.0 - Initial Stable Release (Full features)
 0.1.1 - Bug fix for QR timeout
-0.2.0 - SDK & Developer Tools
+0.2.0 - Developer Tools
 1.0.0 - Enterprise Ready
 2.0.0 - Breaking API changes
 ```
@@ -224,9 +224,7 @@ v0.0.1 Release Package:
 ├── Basic API documentation (Swagger)
 ├── README with quick start
 ├── Single session example
-└── CI/CD workflows (GitHub Actions)
-    ├── Build & test pipeline
-    └── Docker image build
+└── Aspire validation notes
 ```
 
 ## 15.4 Phase 2: Production Ready (Month 4-6)
@@ -442,10 +440,7 @@ v0.1.0 Release Package:
 ├── Integration examples
 │   ├── n8n community node
 │   └── Basic automation examples
-└── CI/CD workflows (GitHub Actions)
-    ├── Build & test pipeline
-    ├── Docker image build & push
-    └── Release automation
+└── Aspire validation and Docker Compose publish notes
 ```
 
 ## 15.6 Future Roadmap (v0.2.0+)
@@ -467,7 +462,7 @@ flowchart LR
     end
 
     subgraph v0.x["v0.x Series - Enhancements"]
-        V020[v0.2.0 - SDK & Developer Tools]
+        V020[v0.2.0 - Developer Tools]
         V030[v0.3.0 - Performance & Observability]
     end
 
@@ -479,12 +474,10 @@ flowchart LR
     Phase1 --> Phase2 --> Current --> v0.x --> v1.x
 ```
 
-### v0.2.0 - SDK & Developer Tools
+### v0.2.0 - Developer Tools
 
 | Feature                | Priority | Description                     |
 | ---------------------- | -------- | ------------------------------- |
-| JavaScript/Node.js SDK | P1       | Official client library         |
-| Python SDK             | P2       | Python client library           |
 | Docs Site              | P1       | Documentation website           |
 | Postman Collection     | P1       | Ready-to-use API collection     |
 | Video Tutorials        | P2       | Getting started video series    |

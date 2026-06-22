@@ -578,88 +578,9 @@ describe('Security Tests', () => {
 });
 ```
 
-## 09.7 CI/CD Integration
+## 09.7 Validation Integration
 
-### GitHub Actions Workflow
-
-```yaml
-# .github/workflows/test.yml
-name: Tests
-
-on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main]
-
-jobs:
-  unit-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-      
-      - run: npm ci
-      - run: npm run test:cov
-      
-      - name: Upload coverage
-        uses: codecov/codecov-action@v3
-        with:
-          files: ./coverage/lcov.info
-
-  integration-tests:
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_DB: openwa_test
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-        ports:
-          - 5432:5432
-      redis:
-        image: redis:7
-        ports:
-          - 6379:6379
-    
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      
-      - run: npm ci
-      - run: npm run test:integration
-        env:
-          DATABASE_URL: postgresql://test:test@localhost:5432/openwa_test
-          REDIS_URL: redis://localhost:6379
-
-  e2e-tests:
-    runs-on: ubuntu-latest
-    needs: [unit-tests, integration-tests]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      
-      - run: npm ci
-      - run: npm run build
-      - run: npm run test:e2e
-
-  security-scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: npm audit --audit-level=high
-      - uses: snyk/actions/node@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-```
+OpenWA runtime validation is owned by the parent Aspire AppHost. Before merging runtime changes, run the backend tests, build the dashboard, and verify the Aspire resources are healthy with `aspire run` plus `aspire wait` for OpenWA, PostgreSQL, Redis, and the webhook API.
 
 ## 09.8 Test Reporting
 

@@ -289,30 +289,7 @@ Dependencies (`whatsapp-web.js`, Puppeteer, NestJS, etc.) may have vulnerabiliti
 
 **Mitigation Strategies:**
 
-```yaml
-# .github/workflows/security.yml
-name: Security Scan
-
-on:
-  schedule:
-    - cron: '0 0 * * *'  # Daily
-  push:
-    branches: [main]
-
-jobs:
-  audit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: npm audit
-        run: npm audit --audit-level=high
-        
-      - name: Snyk scan
-        uses: snyk/actions/node@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-```
+Run dependency audits and static analysis from the parent AgentForge repository pipeline. Security policy, scheduling, and reporting are managed outside the OpenWA source tree.
 
 **Dependency Management Policy:**
 

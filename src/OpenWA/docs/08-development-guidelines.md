@@ -59,9 +59,6 @@ openwa/
 ├── scripts/                       # Utility scripts
 ├── docker/                        # Docker files
 │
-├── .github/                       # GitHub config
-│   └── workflows/
-│
 ├── package.json
 ├── tsconfig.json
 ├── nest-cli.json

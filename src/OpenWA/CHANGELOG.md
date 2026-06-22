@@ -73,18 +73,11 @@ bugs. Backward compatible except for the two upgrade notes below.
 - **Lint is now enforced**: `lint` runs ESLint in check mode (fails on
   violations) with a new `lint:fix` for local auto-fixing; fixed the latent
   lint issues this surfaced across the codebase. (#208)
-- **CI** publishes multi-arch Docker images (`linux/amd64` + `linux/arm64`).
-  Closes #164. (#166)
 
 ### Added
 
 - Documented the API key management endpoints. Closes #110. (#130)
 - Indonesian Docker deployment guide and an API-spec diagram fix. (#188, #189)
-
-### Dependencies
-
-- Dependabot minor/patch group (NestJS, BullMQ, Bull Board, helmet, ioredis,
-  etc.) and `@types/uuid` v11. (#194, #143)
 
 ### Upgrade notes
 
@@ -109,11 +102,6 @@ bugs. Backward compatible except for the two upgrade notes below.
 
 - **Version badge sync**: Updated version badges in `README.md` (was 0.1.4), `docs/README.md`
   (was 0.1.0), and Swagger API docs (was 0.1.0) to 0.1.6.
-- **Dependency updates**: Merged Dependabot PRs for 12 npm packages (`@aws-sdk/client-s3`,
-  `@nestjs/swagger`, `bullmq`, `class-validator`, `tar-stream`, `typeorm`, `@types/node`,
-  `eslint`, `globals`, `jest`, `typescript-eslint`) and 1 dashboard package (`globals`).
-- **GitHub Actions**: Upgraded `docker/setup-buildx-action` v3→v4, `codecov/codecov-action` v5→v6,
-  `docker/login-action` v3→v4, `docker/metadata-action` v5→v6, `actions/upload-artifact` v6→v7.
 
 ## [0.1.5] - 2026-04-27
 
@@ -143,7 +131,6 @@ bugs. Backward compatible except for the two upgrade notes below.
 ### Changed
 
 - **ESLint 10 upgrade**: Upgraded `eslint` and `@eslint/js` from v9 to v10 in both root and dashboard
-- **Dependency updates**: Merged Dependabot PRs for 6 root packages, 2 dashboard packages, and `@types/node` 24→25
 - **Dashboard peer deps**: Added `.npmrc` with `legacy-peer-deps=true` for `eslint-plugin-react-hooks` ESLint 10 compatibility
 
 ### Fixed
@@ -155,16 +142,11 @@ bugs. Backward compatible except for the two upgrade notes below.
 
 ### Fixed
 
-- **Node 22 LTS upgrade**: Upgraded CI, release workflow, and Dockerfile from Node 20 to Node 22 (current LTS)
+- **Node 22 LTS upgrade**: Upgraded runtime from Node 20 to Node 22 (current LTS)
 - **Lockfile compatibility**: Regenerated `package-lock.json` with npm 10 to match CI runtime
 - **TypeScript type conflicts**: Fixed `whatsapp-web.js` type mismatches after dependency update using `Omit<>` pattern
-- **ESLint peer dependency**: Pinned `@eslint/js` and `eslint` to v9 to resolve Dependabot-introduced peer conflict
+- **ESLint peer dependency**: Pinned `@eslint/js` and `eslint` to v9 to resolve peer conflicts
 - **CI npm audit**: Changed audit level from `high` to `critical` — high-severity findings are all in unfixable transitive dependencies
-
-### Changed
-
-- **Dependency updates**: Merged Dependabot PRs for 12 npm packages, 6 dashboard packages, and 5 GitHub Actions
-- **GitHub Actions**: Upgraded `actions/checkout` v4→v6, `actions/setup-node` v4→v6, `actions/upload-artifact` v4→v6, `docker/build-push-action` v5→v6, `codecov/codecov-action` v4→v5
 
 ## [0.1.2] - 2026-02-18
 
@@ -173,7 +155,7 @@ bugs. Backward compatible except for the two upgrade notes below.
 - **[P1] Database safety**: Default `DATABASE_SYNCHRONIZE` to false to prevent auto-schema changes in production
 - **[P1] Graceful shutdown**: Replace `process.exit()` with ShutdownService callback pattern
 - **[P1] PostgreSQL types**: Use native `jsonb` and `timestamp` column types when available
-- **[P1] Docker orchestration**: Remove duplicate Docker management from main.ts (use DockerService)
+- **[P1] Docker orchestration**: Removed duplicate Docker management from application startup
 - **[P1] Queue stub**: Remove unimplemented message queue processor that always threw errors
 - **[P2] Error visibility**: Add proper logging to all 12 empty catch blocks across backend services
 - **[P2] Type safety**: Reduce `any` usage from 38 to ~4 with typed interfaces for whatsapp-web.js
@@ -190,18 +172,13 @@ bugs. Backward compatible except for the two upgrade notes below.
 
 ### Added
 
-- **CI npm audit**: `npm audit --audit-level=high` in CI pipeline to catch vulnerabilities
 - **CI coverage threshold**: Jest coverage floor to prevent regression
-- **CI dashboard job**: Lint + build for React dashboard runs parallel with backend CI
-- **Dependabot**: Automated dependency updates — npm weekly, GitHub Actions monthly
 
 ## [0.1.1] - 2026-02-17
 
 ### Added
 
 - **Unit Tests**: 94 new tests across auth, session, message, and webhook modules (110 total, ~17% coverage)
-- **Release Workflow**: `release.yml` GitHub Actions — tag-triggered with test gate, GitHub Release, and Docker semver tagging
-- **SDK Scaffolds**: JavaScript/TypeScript and Python client libraries in `sdk/` directory
 - New hook events: `webhook:queued` (after queue add) and `webhook:delivered` (after actual delivery)
 
 ### Fixed

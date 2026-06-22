@@ -180,27 +180,23 @@ curl -X POST 'http://localhost:2785/api/infra/storage/import' \
 | Built-in MinIO → External S3 | ✅      | Export → Config → Import |
 | S3 → Local                   | ✅      | Export → Config → Import |
 
-### Redis Migration (Cache)
+### Redis Migration (Cache and Queues)
 
-Redis in OpenWA is used **only for caching** with TTL-based expiration. Cache data is ephemeral and automatically regenerates from the database.
+Redis is required in the AgentForge-owned OpenWA runtime for cache state and queue-backed webhook delivery. Cache data is ephemeral and automatically regenerates from PostgreSQL; queue data should be treated as live operational state during a migration.
 
-**No migration API needed** - just change configuration:
+Configure Redis from the parent Aspire AppHost:
 
 ```bash
-# Switch from built-in to external Redis
-REDIS_ENABLED=true
-REDIS_BUILTIN=false      # false = external Redis
 REDIS_HOST=your-redis-host.com
 REDIS_PORT=6379
 REDIS_PASSWORD=optional
 ```
 
-| Scenario                  | Support | Notes                        |
-| ------------------------- | ------- | ---------------------------- |
-| Built-in → External Redis | ✅      | Config change only           |
-| External → Built-in Redis | ✅      | Config change only           |
-| Enable → Disable Redis    | ✅      | App uses memory fallback     |
-| Disable → Enable Redis    | ✅      | Cache rebuilds automatically |
+| Scenario              | Support | Notes                                  |
+| --------------------- | ------- | -------------------------------------- |
+| Redis host change     | ✅      | AppHost configuration change           |
+| Redis credential swap | ✅      | Restart OpenWA after secret rotation   |
+| Disable Redis         | ❌      | Redis is required for webhook queues   |
 
 > [!TIP]
 > **Cache Warm-up**: After switching Redis instances, the cache will automatically rebuild as requests come in. No data migration is necessary.

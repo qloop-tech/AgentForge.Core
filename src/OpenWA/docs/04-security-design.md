@@ -684,68 +684,9 @@ npm audit fix
 npm audit --json > audit-report.json
 ```
 
-### GitHub Dependabot Configuration
+### Security Scanning
 
-```yaml
-# .github/dependabot.yml
-version: 2
-updates:
-  - package-ecosystem: "npm"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 10
-    groups:
-      development-dependencies:
-        dependency-type: "development"
-      production-dependencies:
-        dependency-type: "production"
-    ignore:
-      # Major version updates require manual review
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
-```
-
-### Security Scanning in CI
-
-```yaml
-# .github/workflows/security.yml
-name: Security Scan
-
-on:
-  push:
-    branches: [main, develop]
-  schedule:
-    - cron: '0 0 * * 1'  # Weekly on Monday
-
-jobs:
-  audit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          
-      - name: Install dependencies
-        run: npm ci
-        
-      - name: Run npm audit
-        run: npm audit --audit-level=high
-        
-      - name: Run Snyk security scan
-        uses: snyk/actions/node@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          args: --severity-threshold=high
-          
-      - name: SAST with CodeQL
-        uses: github/codeql-action/analyze@v2
-```
+Run dependency audits and static analysis from the AgentForge repository pipeline. OpenWA no longer carries its own GitHub automation; the parent repo owns scheduling, policy, and reporting.
 
 ### Allowed/Blocked Packages
 

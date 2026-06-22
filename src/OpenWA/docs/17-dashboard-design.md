@@ -1054,6 +1054,6 @@ server {
 
 <div align="center">
 
-[← 16 - Risk Management](./16-risk-management.md) · [Documentation Index](./README.md) · [Next: 18 - SDK Design →](./18-sdk-design.md)
+[← 16 - Risk Management](./16-risk-management.md) · [Documentation Index](./README.md) · [Next: 19 - Plugin Architecture →](./19-plugin-architecture.md)
 
 </div>

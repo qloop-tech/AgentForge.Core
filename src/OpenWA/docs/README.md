@@ -50,7 +50,6 @@
 | 15  | [Project Roadmap](./15-project-roadmap.md)                       | Near-term and long-term roadmap                   |
 | 16  | [Risk Management](./16-risk-management.md)                       | Risks and mitigations                             |
 | 17  | [Dashboard Design](./17-dashboard-design.md)                     | Dashboard UX overview                             |
-| 18  | [SDK Design](./18-sdk-design.md)                                 | SDK plans and conventions                         |
 | 19  | [Plugin Architecture](./19-plugin-architecture.md)               | Extensibility concepts                            |
 | 20  | [Community Guidelines](./20-community-guidelines.md)             | Contribution and governance                       |
 | 21  | [Glossary](./21-glossary.md)                                     | Terms and definitions                             |
@@ -172,16 +171,16 @@ socket.on('message', msg => {
 | WebSocket Events (Socket.IO)    | Ready                         |
 | Multi-session Support           | Ready                         |
 | Web Dashboard                   | Ready                         |
-| Docker + Traefik Deployment     | Ready                         |
+| Aspire-managed Deployment       | Ready                         |
 | Webhooks with HMAC Signature    | Ready                         |
-| SQLite / PostgreSQL Storage     | Ready                         |
+| PostgreSQL Storage              | Ready                         |
 | API Key Authentication & Roles  | Ready                         |
 | CIDR IP Whitelisting            | Ready                         |
 | Rate Limiting                   | Ready                         |
 | Audit Logging                   | Ready                         |
 | Groups / Contacts / Labels API  | Ready                         |
 | Channels / Status / Catalog API | Experimental (engine-limited) |
-| Queue-based Webhook Retries     | Optional (QUEUE_ENABLED=true) |
+| Redis-backed Webhook Retries    | Required                      |
 
 ## Tech Stack
 

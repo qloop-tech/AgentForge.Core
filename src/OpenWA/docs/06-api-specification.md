@@ -1654,16 +1654,7 @@ OpenAPI JSON:
 http://localhost:2785/api/docs-json
 ```
 
-## 6.9 SDK & Code Examples
-
-### Official SDKs (Coming Soon)
-
-| Language | Package | Status |
-|----------|---------|--------|
-| JavaScript/TypeScript | `@openwa/sdk` | 🔜 Planned |
-| Python | `openwa-python` | 🔜 Planned |
-| PHP | `openwa/php-sdk` | 🔜 Planned |
-| Go | `openwa-go` | 🔜 Planned |
+## 6.9 Code Examples
 
 ### cURL Examples
 
