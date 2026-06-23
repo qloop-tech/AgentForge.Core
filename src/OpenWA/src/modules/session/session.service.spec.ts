@@ -51,6 +51,9 @@ describe('SessionService', () => {
       update: jest.fn(),
     };
     messageRepository = {
+      create: jest.fn().mockImplementation((data: Partial<Message>) => data as Message),
+      save: jest.fn().mockImplementation((message: Message) => Promise.resolve(message)),
+      exists: jest.fn().mockResolvedValue(false),
       update: jest.fn(),
     };
 

@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { Client, LocalAuth, MessageMedia, MessageTypes } from 'whatsapp-web.js';
+import { Client, LocalAuth, Message as WWebMessage, MessageMedia, MessageTypes } from 'whatsapp-web.js';
 import * as qrcode from 'qrcode';
 import * as path from 'path';
 import {
@@ -59,6 +59,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   private phoneNumber: string | null = null;
   private pushName: string | null = null;
   private callbacks: EngineEventCallbacks = {};
+  private readonly processedIncomingMessageIds = new Set<string>();
 
   constructor(private readonly config: WhatsAppWebJsConfig) {
     super();
@@ -143,69 +144,14 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       }
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-misused-promises
-    this.client.on('message', async msg => {
-      try {
-        const incomingMessage: IncomingMessage = buildIncomingMessageBase(msg);
-
-        // Enrich the sender contact with the saved name (best-effort, from the WhatsApp Web cache).
-        // `author`/`from` resolve to the actual sender for group and 1:1 messages respectively.
-        try {
-          const contact = await msg.getContact();
-          if (contact?.name || contact?.pushname) {
-            incomingMessage.contact = {
-              name: contact.name || incomingMessage.contact?.name,
-              pushName: contact.pushname || incomingMessage.contact?.pushName,
-            };
-          }
-        } catch (error) {
-          this.logger.error('Error getting message contact', String(error));
-        }
-
-        // Handle location
-        if (msg.type === MessageTypes.LOCATION && msg.location) {
-          incomingMessage.location = {
-            latitude: Number(msg.location.latitude),
-            longitude: Number(msg.location.longitude),
-            description: msg.location.description || undefined,
-            address: msg.location.address || undefined,
-            url: msg.location.url || undefined,
-          };
-        }
-
-        // Handle media
-        if (msg.hasMedia) {
-          try {
-            const media = await msg.downloadMedia();
-            if (media) {
-              incomingMessage.media = {
-                mimetype: media.mimetype,
-                filename: media.filename || undefined,
-                data: media.data,
-              };
-            }
-          } catch (error) {
-            this.logger.error('Error downloading media', String(error));
-          }
-        }
-
-        // Handle quoted message
-        if (msg.hasQuotedMsg) {
-          try {
-            const quoted = await msg.getQuotedMessage();
-            incomingMessage.quotedMessage = {
-              id: quoted.id._serialized,
-              body: quoted.body,
-            };
-          } catch (error) {
-            this.logger.error('Error getting quoted message', String(error));
-          }
-        }
-
-        this.callbacks.onMessage?.(incomingMessage);
-      } catch (error) {
-        this.logger.error('Error processing incoming message', String(error));
+    this.client.on('message_create', msg => {
+      if (!msg.fromMe) {
+        void this.processIncomingMessage(msg, 'message_create');
       }
+    });
+
+    this.client.on('message', msg => {
+      void this.processIncomingMessage(msg, 'message');
     });
 
     this.client.on('message_ack', (msg, ack) => {
@@ -221,6 +167,86 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       this.setStatus(EngineStatus.FAILED);
       this.callbacks.onDisconnected?.('Authentication failed');
     });
+  }
+
+  private async processIncomingMessage(msg: WWebMessage, source: 'message' | 'message_create'): Promise<void> {
+    const messageId = msg.id?._serialized;
+    if (!messageId) return;
+
+    if (this.processedIncomingMessageIds.has(messageId)) {
+      return;
+    }
+    this.processedIncomingMessageIds.add(messageId);
+
+    try {
+      const incomingMessage: IncomingMessage = buildIncomingMessageBase(msg);
+
+      this.logger.log(`Incoming message received from ${incomingMessage.from}`, {
+        messageId: incomingMessage.id,
+        from: incomingMessage.from,
+        source,
+        action: 'incoming_message',
+      });
+
+      // Enrich the sender contact with the saved name (best-effort, from the WhatsApp Web cache).
+      // `author`/`from` resolve to the actual sender for group and 1:1 messages respectively.
+      try {
+        const contact = await msg.getContact();
+        if (contact?.name || contact?.pushname) {
+          incomingMessage.contact = {
+            name: contact.name || incomingMessage.contact?.name,
+            pushName: contact.pushname || incomingMessage.contact?.pushName,
+          };
+        }
+      } catch (error) {
+        this.logger.error('Error getting message contact', String(error));
+      }
+
+      // Handle location
+      if (msg.type === MessageTypes.LOCATION && msg.location) {
+        incomingMessage.location = {
+          latitude: Number(msg.location.latitude),
+          longitude: Number(msg.location.longitude),
+          description: msg.location.description || undefined,
+          address: msg.location.address || undefined,
+          url: msg.location.url || undefined,
+        };
+      }
+
+      // Handle media
+      if (msg.hasMedia) {
+        try {
+          const media = await msg.downloadMedia();
+          if (media) {
+            incomingMessage.media = {
+              mimetype: media.mimetype,
+              filename: media.filename || undefined,
+              data: media.data,
+            };
+          }
+        } catch (error) {
+          this.logger.error('Error downloading media', String(error));
+        }
+      }
+
+      // Handle quoted message
+      if (msg.hasQuotedMsg) {
+        try {
+          const quoted = await msg.getQuotedMessage();
+          incomingMessage.quotedMessage = {
+            id: quoted.id._serialized,
+            body: quoted.body,
+          };
+        } catch (error) {
+          this.logger.error('Error getting quoted message', String(error));
+        }
+      }
+
+      this.callbacks.onMessage?.(incomingMessage);
+    } catch (error) {
+      this.processedIncomingMessageIds.delete(messageId);
+      this.logger.error('Error processing incoming message', String(error));
+    }
   }
 
   private setStatus(status: EngineStatus): void {

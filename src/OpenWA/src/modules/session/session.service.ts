@@ -17,7 +17,7 @@ import { createLogger } from '../../common/services/logger.service';
 import { EventsGateway } from '../events/events.gateway';
 import { WebhookService } from '../webhook/webhook.service';
 import { HookManager } from '../../core/hooks';
-import { Message, MessageStatus } from '../message/entities/message.entity';
+import { Message, MessageDirection, MessageStatus } from '../message/entities/message.entity';
 
 interface ReconnectState {
   attempts: number;
@@ -326,7 +326,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
           });
         },
         onMessage: (message): void => {
-          this.logger.debug(`Message received from ${message.from}`, {
+          this.logger.log(`Message received from ${message.from}`, {
             sessionId: id,
             messageId: message.id,
             from: message.from,
@@ -334,6 +334,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
           });
           // Update last active timestamp
           void this.sessionRepository.update(id, { lastActiveAt: new Date() });
+          void this.saveIncomingMessage(id, message);
           // Convert IncomingMessage to plain object for dispatch
           const messageData = { ...message };
 
@@ -409,6 +410,41 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
       }
       await this.updateStatus(id, SessionStatus.FAILED);
       throw error;
+    }
+  }
+
+  private async saveIncomingMessage(sessionId: string, message: { id: string; chatId: string; from: string; to: string; body: string; type: string; timestamp: number }): Promise<void> {
+    try {
+      const exists = await this.messageRepository.exists({
+        where: {
+          sessionId,
+          waMessageId: message.id,
+        },
+      });
+
+      if (exists) return;
+
+      await this.messageRepository.save(
+        this.messageRepository.create({
+          sessionId,
+          waMessageId: message.id,
+          chatId: message.chatId,
+          from: message.from,
+          to: message.to,
+          body: message.body,
+          type: message.type,
+          direction: MessageDirection.INCOMING,
+          timestamp: message.timestamp,
+          status: MessageStatus.DELIVERED,
+        }),
+      );
+    } catch (error) {
+      this.logger.warn('Failed to persist incoming message', {
+        sessionId,
+        messageId: message.id,
+        error: String(error),
+        action: 'incoming_message_persist_failed',
+      });
     }
   }
 
