@@ -54,6 +54,7 @@ public sealed class TravelVerticalPlugin : IVerticalPlugin
     public void ValidateDeployment()
     {
         TravelDataFiles.EnsureDataDirectoryExists();
+        TravelAssetFiles.EnsureAssetDirectoryExists();
         TravelConfigurationFiles.EnsureDefaultFilesExist();
     }
 }

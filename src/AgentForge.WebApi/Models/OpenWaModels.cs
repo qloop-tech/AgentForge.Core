@@ -17,13 +17,24 @@ public sealed record OpenWaSendTextRequest(
     [property: JsonPropertyName("chatId")] string ChatId,
     [property: JsonPropertyName("text")] string Text);
 
-public sealed record OpenWaSendImageRequest(
+public sealed record OpenWaSendMediaRequest(
     [property: JsonPropertyName("chatId")] string ChatId,
-    [property: JsonPropertyName("image")] OpenWaImagePayload Image,
-    [property: JsonPropertyName("caption")] string? Caption);
+    [property: JsonPropertyName("url")] string Url,
+    [property: JsonPropertyName("mimetype")] string? Mimetype = null,
+    [property: JsonPropertyName("filename")] string? Filename = null,
+    [property: JsonPropertyName("caption")] string? Caption = null);
 
-public sealed record OpenWaImagePayload(
-    [property: JsonPropertyName("url")] string Url);
+public sealed record OpenWaSendLocationRequest(
+    [property: JsonPropertyName("chatId")] string ChatId,
+    [property: JsonPropertyName("latitude")] double Latitude,
+    [property: JsonPropertyName("longitude")] double Longitude,
+    [property: JsonPropertyName("description")] string? Description,
+    [property: JsonPropertyName("address")] string? Address);
+
+public sealed record OpenWaSendContactRequest(
+    [property: JsonPropertyName("chatId")] string ChatId,
+    [property: JsonPropertyName("contactName")] string ContactName,
+    [property: JsonPropertyName("contactNumber")] string ContactNumber);
 
 public sealed record OpenWaWebhookRegistration(
     [property: JsonPropertyName("url")] string Url,

@@ -19,5 +19,6 @@ public sealed class TravelMcpRegistrar : IVerticalMcpRegistrar
         services.AddSingleton<HotelService>();
         services.AddSingleton<PromotionService>();
         services.AddSingleton<PolicyService>();
+        services.AddSingleton<TravelMediaService>();
     }
 }

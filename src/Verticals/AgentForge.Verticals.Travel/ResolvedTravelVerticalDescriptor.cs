@@ -21,6 +21,8 @@ internal sealed class ResolvedTravelVerticalDescriptor(
 
     public string AssetPathPrefix => options.AssetPathPrefix;
 
+    public string AssetRootPath => TravelAssetFiles.AssetRoot;
+
     public string PreviewTitle => options.PreviewTitle;
 
     public string PreviewDescription => options.PreviewDescription;

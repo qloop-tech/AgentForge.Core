@@ -10,5 +10,8 @@
   <Folder Name="/src/Verticals/">
     <Project Path="src/Verticals/AgentForge.Verticals.Travel/AgentForge.Verticals.Travel.csproj" />
   </Folder>
-  <Folder Name="/tests/" />
+  <Folder Name="/tests/">
+    <Project Path="tests/AgentForge.Verticals.Travel.Tests/AgentForge.Verticals.Travel.Tests.csproj" />
+    <Project Path="tests/AgentForge.WebApi.Tests/AgentForge.WebApi.Tests.csproj" />
+  </Folder>
 </Solution>

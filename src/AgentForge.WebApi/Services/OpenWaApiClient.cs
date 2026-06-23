@@ -26,17 +26,82 @@ public sealed class OpenWaApiClient(
         string imageUrl,
         string? caption = null,
         CancellationToken cancellationToken = default)
+        => await SendMediaAsync("send-image", phoneNumber, imageUrl, caption: caption, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+    public async Task SendVideoAsync(
+        string phoneNumber,
+        string videoUrl,
+        string? caption = null,
+        CancellationToken cancellationToken = default)
+        => await SendMediaAsync("send-video", phoneNumber, videoUrl, caption: caption, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+    public async Task SendAudioAsync(
+        string phoneNumber,
+        string audioUrl,
+        string? filename = null,
+        CancellationToken cancellationToken = default)
+        => await SendMediaAsync("send-audio", phoneNumber, audioUrl, filename: filename, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+    public async Task SendDocumentAsync(
+        string phoneNumber,
+        string documentUrl,
+        string? filename = null,
+        string? caption = null,
+        CancellationToken cancellationToken = default)
+        => await SendMediaAsync(
+                "send-document",
+                phoneNumber,
+                documentUrl,
+                filename: filename,
+                caption: caption,
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+    public async Task SendLocationAsync(
+        string phoneNumber,
+        double latitude,
+        double longitude,
+        string? label = null,
+        string? address = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(phoneNumber);
-        ArgumentException.ThrowIfNullOrWhiteSpace(imageUrl);
         var sessionRouteId = await ResolveSessionRouteIdAsync(cancellationToken).ConfigureAwait(false);
 
         await PostAsync(
-                $"/api/sessions/{sessionRouteId}/messages/send-image",
-                new OpenWaSendImageRequest(phoneNumber, new OpenWaImagePayload(imageUrl), caption),
+                $"/api/sessions/{sessionRouteId}/messages/send-location",
+                new OpenWaSendLocationRequest(phoneNumber, latitude, longitude, label, address),
                 cancellationToken)
             .ConfigureAwait(false);
     }
+
+    public async Task SendContactAsync(
+        string phoneNumber,
+        string contactName,
+        string contactNumber,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(phoneNumber);
+        ArgumentException.ThrowIfNullOrWhiteSpace(contactName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(contactNumber);
+        var sessionRouteId = await ResolveSessionRouteIdAsync(cancellationToken).ConfigureAwait(false);
+
+        await PostAsync(
+                $"/api/sessions/{sessionRouteId}/messages/send-contact",
+                new OpenWaSendContactRequest(phoneNumber, contactName, contactNumber),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task SendStickerAsync(
+        string phoneNumber,
+        string stickerUrl,
+        CancellationToken cancellationToken = default)
+        => await SendMediaAsync("send-sticker", phoneNumber, stickerUrl, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
 
     public async Task EnsureDefaultSessionAsync(CancellationToken cancellationToken = default)
     {
@@ -204,6 +269,66 @@ public sealed class OpenWaApiClient(
         }
 
         logger.LogWarning("Failed to delete existing OpenWA webhook {WebhookId}. Status code: {StatusCode}", webhookId, response.StatusCode);
+    }
+
+    private async Task SendMediaAsync(
+        string action,
+        string phoneNumber,
+        string mediaUrl,
+        string? filename = null,
+        string? caption = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(action);
+        ArgumentException.ThrowIfNullOrWhiteSpace(phoneNumber);
+        ArgumentException.ThrowIfNullOrWhiteSpace(mediaUrl);
+        var sessionRouteId = await ResolveSessionRouteIdAsync(cancellationToken).ConfigureAwait(false);
+
+        await PostAsync(
+                $"/api/sessions/{sessionRouteId}/messages/{action}",
+                new OpenWaSendMediaRequest(
+                    phoneNumber,
+                    mediaUrl,
+                    GetMimeType(mediaUrl),
+                    filename ?? GetFilename(mediaUrl),
+                    caption),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static string? GetFilename(string url)
+    {
+        var path = Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            ? uri.AbsolutePath
+            : url;
+        var filename = Path.GetFileName(path);
+
+        return string.IsNullOrWhiteSpace(filename) ? null : filename;
+    }
+
+    private static string? GetMimeType(string url)
+    {
+        var path = Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            ? uri.AbsolutePath
+            : url;
+
+        return Path.GetExtension(path).ToLowerInvariant() switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            ".mp4" => "video/mp4",
+            ".mov" => "video/quicktime",
+            ".mp3" => "audio/mpeg",
+            ".m4a" => "audio/mp4",
+            ".ogg" => "audio/ogg",
+            ".wav" => "audio/wav",
+            ".pdf" => "application/pdf",
+            ".doc" => "application/msword",
+            ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            _ => null
+        };
     }
 
     private async Task PostAsync<TRequest>(string path, TRequest request, CancellationToken cancellationToken)

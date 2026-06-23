@@ -1,0 +1,58 @@
+[
+  {
+    "id": "kerala-preview-video",
+    "destination": "Kerala",
+    "purpose": "destination-preview",
+    "mediaType": "video",
+    "title": "Kerala Backwaters Preview",
+    "url": "videos/kerala-preview.mp4",
+    "caption": "A quick preview of the Kerala backwaters experience."
+  },
+  {
+    "id": "kerala-audio-brief",
+    "destination": "Kerala",
+    "purpose": "audio-briefing",
+    "mediaType": "audio",
+    "title": "Kerala Audio Brief",
+    "url": "audio/kerala-audio-brief.mp3",
+    "filename": "kerala-audio-brief.mp3"
+  },
+  {
+    "id": "kerala-brochure",
+    "destination": "Kerala",
+    "purpose": "brochure",
+    "mediaType": "document",
+    "title": "Kerala Brochure",
+    "url": "documents/kerala-brochure.pdf",
+    "filename": "kerala-brochure.pdf",
+    "caption": "Kerala package brochure with itinerary highlights."
+  },
+  {
+    "id": "kerala-meeting-point",
+    "destination": "Kerala",
+    "purpose": "meeting-point",
+    "mediaType": "location",
+    "title": "Cochin International Airport",
+    "latitude": 10.152,
+    "longitude": 76.4019,
+    "label": "Cochin International Airport",
+    "address": "Airport Road, Kochi, Kerala"
+  },
+  {
+    "id": "aria-travel-contact",
+    "destination": "All",
+    "purpose": "sales-contact",
+    "mediaType": "contact",
+    "title": "Aria Travel Sales",
+    "contactName": "Aria Travel Desk",
+    "contactNumber": "+919999999999"
+  },
+  {
+    "id": "aria-travel-sticker",
+    "destination": "All",
+    "purpose": "sticker",
+    "mediaType": "sticker",
+    "title": "Aria Travel Sticker",
+    "url": "stickers/aria-travel.png"
+  }
+]

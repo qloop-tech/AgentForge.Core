@@ -51,6 +51,10 @@ builder.AddAzureChatCompletionsClient(connectionName: "ai-foundry")
 builder.AddRedisClient("openwa-redis");
 
 builder.Services.AddSingleton<IMessageSender, OpenWaMessageSender>();
+builder.Services.AddSingleton<MediaMarkerParser>();
+builder.Services.AddSingleton<VerticalMediaAssetResolver>();
+builder.Services.AddSingleton(MediaReplyDispatchOptions.Default);
+builder.Services.AddSingleton<MediaReplyDispatcher>();
 
 builder.Services.AddSingleton<McpClientProvider>();
 builder.Services.AddSingleton<AgentSessionStore>();
@@ -90,6 +94,7 @@ var app = builder.Build();
 _ = app.Services.GetRequiredService<IVerticalDescriptor>();
 
 app.UseForwardedHeaders();
+app.UseVerticalAssets();
 app.MapDefaultEndpoints();
 app.MapStaticAssets();
 app.MapWebhookEndpoints();
