@@ -155,6 +155,22 @@ export class WebhookService {
 
     const matchingWebhooks = webhooks.filter(w => w.events.includes(event) || w.events.includes('*'));
 
+    if (matchingWebhooks.length === 0) {
+      this.logger.debug(`No active webhooks match ${event}`, {
+        sessionId,
+        event,
+        activeWebhooks: webhooks.length,
+        action: 'webhook_no_match',
+      });
+      return;
+    }
+
+    this.logger.log(`Dispatching ${event} to ${matchingWebhooks.length} webhook(s)`, {
+      sessionId,
+      event,
+      action: 'webhook_dispatch_start',
+    });
+
     // Generate idempotency key (same for all webhooks receiving this event)
     const idempotencyKey = generateIdempotencyKey(event, { ...data, sessionId });
 
@@ -187,8 +203,8 @@ export class WebhookService {
         continue;
       }
 
-      // Use potentially modified payload
-      const finalPayload = (hookResult as { payload: WebhookPayload }).payload;
+      // Use potentially modified payload. If a plugin returns malformed data, fall back to the original payload.
+      const finalPayload = (hookResult as { payload?: WebhookPayload }).payload ?? payload;
 
       // Build headers
       const headers: Record<string, string> = {
@@ -233,7 +249,7 @@ export class WebhookService {
           { sessionId, source: 'WebhookService' },
         );
 
-        this.logger.debug(`Webhook job queued for ${webhook.id}`, {
+        this.logger.log(`Webhook job queued for ${webhook.id}`, {
           webhookId: webhook.id,
           event,
           idempotencyKey,

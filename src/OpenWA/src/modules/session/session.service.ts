@@ -12,7 +12,7 @@ import { Repository, In, Not, IsNull, DataSource } from 'typeorm';
 import { Session, SessionStatus } from './entities/session.entity';
 import { CreateSessionDto } from './dto';
 import { EngineFactory } from '../../engine/engine.factory';
-import { IWhatsAppEngine, EngineStatus } from '../../engine/interfaces/whatsapp-engine.interface';
+import { IWhatsAppEngine, EngineStatus, IncomingMessage } from '../../engine/interfaces/whatsapp-engine.interface';
 import { createLogger } from '../../common/services/logger.service';
 import { EventsGateway } from '../events/events.gateway';
 import { WebhookService } from '../webhook/webhook.service';
@@ -332,29 +332,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
             from: message.from,
             action: 'message_received',
           });
-          // Update last active timestamp
-          void this.sessionRepository.update(id, { lastActiveAt: new Date() });
-          void this.saveIncomingMessage(id, message);
-          // Convert IncomingMessage to plain object for dispatch
-          const messageData = { ...message };
-
-          // Execute hook for message received - plugins can modify or stop processing
-          void this.hookManager
-            .execute('message:received', messageData, {
-              sessionId: id,
-              source: 'Engine',
-            })
-            .then(({ continue: shouldContinue, data: finalMessage }) => {
-              if (!shouldContinue) {
-                // Plugin stopped processing (e.g., auto-reply handled it)
-                return;
-              }
-
-              // Dispatch to webhooks with potentially modified message
-              void this.webhookService.dispatch(id, 'message.received', finalMessage);
-              // Emit real-time event to WebSocket clients
-              this.eventsGateway.emitMessage(id, finalMessage);
-            });
+          void this.handleIncomingMessage(id, message);
         },
         onMessageAck: (messageId: string, ack: number): void => {
           void this.handleMessageAck(id, messageId, ack);
@@ -444,6 +422,49 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
         messageId: message.id,
         error: String(error),
         action: 'incoming_message_persist_failed',
+      });
+    }
+  }
+
+  private async handleIncomingMessage(sessionId: string, message: IncomingMessage): Promise<void> {
+    try {
+      await this.sessionRepository.update(sessionId, { lastActiveAt: new Date() });
+      await this.saveIncomingMessage(sessionId, message);
+
+      const messageData = { ...message };
+      const { continue: shouldContinue, data: finalMessage } = await this.hookManager.execute(
+        'message:received',
+        messageData,
+        {
+          sessionId,
+          source: 'Engine',
+        },
+      );
+
+      if (!shouldContinue) {
+        this.logger.debug('Incoming message processing stopped by plugin', {
+          sessionId,
+          messageId: message.id,
+          action: 'incoming_message_stopped_by_plugin',
+        });
+        return;
+      }
+
+      this.logger.log('Dispatching incoming message to webhooks', {
+        sessionId,
+        messageId: message.id,
+        event: 'message.received',
+        action: 'incoming_message_dispatch',
+      });
+
+      await this.webhookService.dispatch(sessionId, 'message.received', finalMessage);
+      this.eventsGateway.emitMessage(sessionId, finalMessage);
+    } catch (error) {
+      this.logger.error('Incoming message dispatch failed', error instanceof Error ? error.stack : String(error), {
+        sessionId,
+        messageId: message.id,
+        from: message.from,
+        action: 'incoming_message_dispatch_failed',
       });
     }
   }

@@ -51,14 +51,16 @@ export class CacheService implements OnModuleDestroy {
     try {
       const host = process.env.REDIS_HOST || this.configService.get<string>('REDIS_HOST', 'localhost');
       const port = parseInt(process.env.REDIS_PORT || '', 10) || this.configService.get<number>('REDIS_PORT', 6379);
+      const tls = process.env.REDIS_TLS === 'true' || this.configService.get<boolean>('redis.tls', false);
 
       this.logger.log(`Connecting to Redis at ${host}:${port} (attempt ${this.connectionAttempts})`);
 
       this.redis = new Redis({
         host,
         port,
-        password: this.configService.get<string>('REDIS_PASSWORD'),
+        password: process.env.REDIS_PASSWORD || this.configService.get<string>('redis.password'),
         db: this.configService.get<number>('REDIS_CACHE_DB', 1),
+        ...(tls ? { tls: {} } : {}),
         lazyConnect: true,
         maxRetriesPerRequest: 3,
         connectTimeout: 5000,

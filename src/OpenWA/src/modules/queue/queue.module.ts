@@ -22,13 +22,18 @@ export { QUEUE_NAMES } from './queue-names';
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        connection: {
-          host: configService.get<string>('redis.host', 'localhost'),
-          port: configService.get<number>('redis.port', 6379),
-          password: configService.get<string>('redis.password'),
-        },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const tls = configService.get<boolean>('redis.tls', false);
+
+        return {
+          connection: {
+            host: configService.get<string>('redis.host', 'localhost'),
+            port: configService.get<number>('redis.port', 6379),
+            password: configService.get<string>('redis.password'),
+            ...(tls ? { tls: {} } : {}),
+          },
+        };
+      },
     }),
     BullModule.registerQueue({ name: QUEUE_NAMES.WEBHOOK }),
     BullBoardModule.forRoot({

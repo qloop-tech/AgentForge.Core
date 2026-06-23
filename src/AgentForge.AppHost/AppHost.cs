@@ -1,4 +1,5 @@
 using AgentForge.AppHost;
+using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Docker;
 using Projects;
 
@@ -31,6 +32,9 @@ var openWaPuppeteerExecutablePath = settings.IsPublishMode
     ? "/usr/bin/chromium"
     : builder.Configuration["OPENWA_PUPPETEER_EXECUTABLE_PATH"]
       ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+var openWaRedisEndpoint = settings.IsPublishMode
+    ? openWaRedis.Resource.PrimaryEndpoint
+    : openWaRedis.Resource.GetEndpoint("secondary");
 
 var openWa = builder.AddNodeApp("openwa", "../OpenWA", "dist/main")
     .WithNpm(installCommand: "ci", installArgs: ["--ignore-scripts"])
@@ -47,8 +51,10 @@ var openWa = builder.AddNodeApp("openwa", "../OpenWA", "dist/main")
     .WithEnvironment("DATABASE_NAME", openWaDatabase.Resource.DatabaseName)
     .WithEnvironment("DATABASE_USERNAME", openWaDatabase.Resource.Parent.UserNameReference)
     .WithEnvironment("DATABASE_PASSWORD", openWaPostgresPassword)
-    .WithEnvironment("REDIS_HOST", openWaRedis.Resource.Host)
-    .WithEnvironment("REDIS_PORT", openWaRedis.Resource.Port)
+    .WithEnvironment("REDIS_HOST", openWaRedisEndpoint.Property(EndpointProperty.Host))
+    .WithEnvironment("REDIS_PORT", openWaRedisEndpoint.Property(EndpointProperty.Port))
+    .WithEnvironment("REDIS_PASSWORD", openWaRedis.Resource.PasswordParameter)
+    .WithEnvironment("REDIS_TLS", settings.IsPublishMode ? "true" : "false")
     .WithEnvironment("SESSION_DATA_PATH", $"{openWaDataPath}/sessions")
     .WithEnvironment("STORAGE_TYPE", "local")
     .WithEnvironment("STORAGE_LOCAL_PATH", $"{openWaDataPath}/media")
