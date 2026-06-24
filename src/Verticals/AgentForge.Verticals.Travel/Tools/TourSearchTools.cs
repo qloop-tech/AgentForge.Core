@@ -25,9 +25,10 @@ public class TourSearchTools(TourCatalogService catalog)
     }
 
     [McpServerTool(Name = "get_tour_details", ReadOnly = true)]
-    [Description("Get full details for a specific tour including highlights, inclusions, exclusions, and reviews.")]
+    [Description("Get full details for a specific tour including highlights, inclusions, exclusions, reviews, and optionally image markers.")]
     public string GetTourDetails(
-        [Description("Tour ID (e.g. 'GOA-DEC', 'MANALI-WINTER')")] string tourId)
+        [Description("Tour ID (e.g. 'GOA-DEC', 'MANALI-WINTER')")] string tourId,
+        [Description("Set true only when the traveller explicitly asks for images or accepts an image offer.")] bool includeImages = false)
     {
         var tour = catalog.GetById(tourId);
         if (tour is null) return $"Tour '{tourId}' not found. Use search_tours to find valid tour IDs.";
@@ -40,11 +41,7 @@ public class TourSearchTools(TourCatalogService catalog)
             ? string.Join(", ", tour.Availability.Select(kv => $"{kv.Key}: {kv.Value} slots"))
             : "Contact us for availability.";
 
-        var imageMarkers = string.Join("\n",
-            tour.ImageUrls.Take(3).Select(u => $"{{{{image:{u}|{tour.Name}}}}}"));
-
-        return $"""
-            {imageMarkers}
+        var details = $"""
             *{tour.Name}* 🗺️
             📍 {tour.Destination} | ⏱ {tour.Duration} | 💰 ₹{tour.Price:N0}/person
             Single supplement: ₹{tour.SingleSupplement:N0}
@@ -64,6 +61,18 @@ public class TourSearchTools(TourCatalogService catalog)
             ⭐ *Recent Reviews:*
             {reviews}
             """;
+
+        if (!includeImages)
+        {
+            return details;
+        }
+
+        var imageMarkers = string.Join("\n",
+            tour.ImageUrls.Take(3).Select(u => $"{{{{image:{u}|{tour.Name}}}}}"));
+
+        return string.IsNullOrWhiteSpace(imageMarkers)
+            ? details
+            : $"{imageMarkers}\n{details}";
     }
 
     [McpServerTool(Name = "check_availability", ReadOnly = true)]

@@ -1,7 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
 using AgentForge.WebApi.Services;
 
 namespace AgentForge.WebApi.Tests;
 
+[ExcludeFromCodeCoverage]
 public sealed class MediaMarkerParserTests
 {
     [Fact]

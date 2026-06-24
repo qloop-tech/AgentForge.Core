@@ -24,71 +24,25 @@ Today, you can clone the repo, configure the secrets, and run the travel experie
 
 ---
 
+## Documentation Map
+
+| Start here | Use when you want to understand |
+|---|---|
+| [Architecture](docs/Architecture.md) | End-to-end message flow sequence diagram, roles, Redis queueing, inbound media guard, outbound media dispatch, and platform boundaries |
+| [Vertical Plugin System](docs/vertical-plugin-system.md) | The class-level plugin contract and how to author another industry vertical |
+| [Deployment Guide](docs/deployment.md) | Aspire-generated Docker Compose, production-like local demos, and Cloudflare tunnel workflow |
+| [OpenWA README](src/OpenWA/README.md) | The embedded WhatsApp API gateway and dashboard source used by AgentForge |
+| [Repository Guidelines](docs/repository-guidelines.md) | Project structure, build/test commands, style rules, PR guidance, and security tips |
+
+---
+
 ## Architecture
 
-```mermaid
-flowchart TD
-    subgraph Customer["📱 Customer"]
-        WA[WhatsApp Mobile]
-    end
+At runtime, a WhatsApp user message travels through OpenWA, the signed WebApi webhook, Redis dedupe and queueing, Aria's Azure AI Foundry-backed agent, the active vertical's MCP tools, and finally back through OpenWA as a WhatsApp reply.
 
-    subgraph Aspire["🚀 .NET Aspire — AppHost"]
-        OWA["OpenWA API + Dashboard"]
-        DT["DevTunnel\npublic HTTPS webhook"]
+The canonical architecture walkthrough is the **[Architecture](docs/Architecture.md)** guide. It contains the end-to-end sequence diagram, the role of each entity, the inbound media guard, Redis Streams queueing, outbound media dispatch, and platform boundaries.
 
-        subgraph WebApi["AgentForge.WebApi  —  AI Gateway"]
-            WH["/webhook endpoint"]
-            Q["WhatsAppMessageQueue\nbounded Channel&lt;T&gt;"]
-            ACS["AgentChatService\nclient-managed session history"]
-            VAF["VerticalAgentFactory"]
-            OWC["OpenWaApiClient"]
-        end
-
-        subgraph MCP["AgentForge.McpHost  —  Generic MCP Host"]
-            MT["Tools/resources\nfrom active vertical plugin"]
-        end
-
-        subgraph Plugin["Active Vertical Plugin"]
-            VP["IVerticalPlugin\nDescriptor + MCP registrar + WebApi registrations"]
-            TV["Travel vertical today\nOther industries later"]
-        end
-    end
-
-    subgraph Azure["☁️ Azure AI Foundry"]
-        AI["GPT-5.4 mini\nAgent defined by active vertical"]
-    end
-
-    WA -->|"sends message"| OWA
-    OWA -->|"webhook POST"| DT
-    DT --> WH
-    WH -->|"enqueue"| Q
-    Q -->|"dequeue per message"| ACS
-    ACS --> VAF
-    VAF --> VP
-    VP --> MT
-    ACS <-->|"MCP StreamableHttp"| MT
-    ACS <-->|"chat completions"| AI
-    ACS --> OWC
-    OWC -->|"POST /api/sessions/default/messages/send-text"| OWA
-    OWA -->|"delivers reply"| WA
-```
-
-### Message Flow (step by step)
-
-1. Customer sends a WhatsApp message to the business number
-2. OpenWA receives it and POSTs a webhook to the public DevTunnel URL
-3. `AgentForge.WebApi` verifies the OpenWA HMAC signature and enqueues the message into a bounded `Channel<T>`
-4. `WhatsAppMessageQueue` dequeues and calls `AgentChatService`
-5. `AgentChatService` restores the customer's conversation session (in-memory, keyed by phone number)
-6. `VerticalAgentFactory` initializes the agent using the active vertical descriptor and prompt
-7. `AgentForge.McpHost` loads tools/resources from the selected vertical assembly and executes requested MCP calls
-8. The active vertical shapes the conversation behavior, available tools, preview metadata, and scheduled action handling
-9. `OpenWaApiClient` delivers the WhatsApp-friendly reply back through OpenWA
-
-Alongside the live chat, `SchedulerService` dispatches generic scheduled actions to the active vertical's `IScheduledActionHandler` implementation.
-
-For the class-level plugin loading flow, runtime contracts, and the concrete travel example, see
-the **[Vertical Plugin System](docs/vertical-plugin-system.md)** deep dive.
+For the class-level plugin loading flow, runtime contracts, and the concrete travel example, see the **[Vertical Plugin System](docs/vertical-plugin-system.md)** deep dive.
 
 ---
 
@@ -167,11 +121,13 @@ whatsapp-ai-travel-agent/
 │   ├── AgentForge.WebApi/           # AI gateway — receives webhooks, runs the active vertical agent, sends WhatsApp replies
 │   │   ├── Endpoints/               #   WebhookEndpoint (/webhook)
 │   │   ├── Services/                #   AgentChatService, VerticalAgentFactory, OpenWaApiClient, WebhookRegistrationService, McpClientProvider
-│   │   ├── Queue/                   #   WhatsAppMessageQueue (bounded Channel<T> background service)
+│   │   ├── Queue/                   #   WhatsAppMessageQueue (Redis Streams background service)
 │   │   └── Scheduling/              #   SchedulerService (generic scheduled action dispatcher)
 │   └── Verticals/
 │       └── AgentForge.Verticals.Travel/ # Travel plugin: config pack, prompt, tools, resources, services, data, scheduled actions
-├── tests/                           # Reserved for upcoming test projects
+├── tests/
+│   ├── AgentForge.WebApi.Tests/     # Webhook, OpenWA client, parser, dispatcher, and guard tests
+│   └── AgentForge.Verticals.Travel.Tests/ # Travel tools, data, media, and asset tests
 └── artifacts/                       # Reserved for build and plugin outputs
 ```
 
@@ -489,7 +445,7 @@ Contributions are welcome! Please follow these steps:
 
 - Services are registered as `Singleton` or `Scoped` — never `Transient` for stateful classes
 - HTTP clients use `IHttpClientFactory` (typed or named) — no `new HttpClient()`
-- Background work uses `Channel<T>` or `IHostedService` — no `_ = Task.Run(...)`
+- Background work uses Redis Streams, channels, or `IHostedService` — no `_ = Task.Run(...)`
 - Retries are intentionally disabled on `OpenWaApiClient` — retrying a send request can produce duplicate WhatsApp messages
 
 ---

@@ -100,8 +100,24 @@ public sealed record OpenWaMessage(
     [property: JsonPropertyName("text")] JsonElement? Text,
     [property: JsonPropertyName("fromMe")] bool? FromMe,
     [property: JsonPropertyName("hasMedia")] bool? HasMedia,
-    [property: JsonPropertyName("type")] string? Type)
+    [property: JsonPropertyName("type")] string? Type,
+    [property: JsonPropertyName("media")] JsonElement? Media,
+    [property: JsonPropertyName("location")] JsonElement? Location)
 {
+    private static readonly HashSet<string> UnsupportedMediaTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "image",
+        "video",
+        "audio",
+        "ptt",
+        "voice",
+        "document",
+        "sticker",
+        "location",
+        "contact",
+        "vcard"
+    };
+
     public string? GetSender()
         => !string.IsNullOrWhiteSpace(From) ? From
             : !string.IsNullOrWhiteSpace(Sender) ? Sender
@@ -128,4 +144,13 @@ public sealed record OpenWaMessage(
             _ => null
         };
     }
+
+    public bool HasUnsupportedInboundMedia()
+        => HasMedia == true
+           || HasJsonValue(Media)
+           || HasJsonValue(Location)
+           || (!string.IsNullOrWhiteSpace(Type) && UnsupportedMediaTypes.Contains(Type));
+
+    private static bool HasJsonValue(JsonElement? value)
+        => value is { ValueKind: not JsonValueKind.Undefined and not JsonValueKind.Null };
 }

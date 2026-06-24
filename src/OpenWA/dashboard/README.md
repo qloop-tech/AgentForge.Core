@@ -1,89 +1,25 @@
-# OpenWA Dashboard
+# OpenWA dashboard
 
-<p align="center">
-  <img src="../docs/logo/openwa_logo.webp" alt="OpenWA Logo" width="120"/>
-</p>
+This folder contains the Vite dashboard used by the embedded OpenWA gateway inside AgentForge. It is started by AgentForge.AppHost as the OpenWA dashboard resource and surfaces session, webhook, and infrastructure management for the WhatsApp transport layer.
 
-Modern web dashboard for managing OpenWA WhatsApp API Gateway sessions, webhooks, and infrastructure.
+## What it does
 
-## ✨ Features
+- Manage WhatsApp sessions and connection state
+- Display QR codes for pairing
+- Configure webhook endpoints and API keys
+- Show basic infrastructure and health information
 
-- **Session Management** - Create, monitor, and control WhatsApp sessions
-- **QR Code Authentication** - Real-time QR code display for device pairing
-- **Webhook Configuration** - Configure and test webhook endpoints
-- **API Key Management** - Generate and manage API keys
-- **Infrastructure Monitoring** - View system health and storage status
-- **Real-time Updates** - Live session status via WebSocket
+## Where to learn more
 
-## 🛠️ Tech Stack
+- Platform architecture: [../../../docs/Architecture.md](../../../docs/Architecture.md)
+- Embedded gateway source: [../README.md](../README.md)
 
-| Technology       | Purpose                 |
-| ---------------- | ----------------------- |
-| React 19         | UI Framework            |
-| TypeScript       | Type Safety             |
-| Vite 7           | Build Tool              |
-| React Router 7   | Client-side Routing     |
-| TanStack Query   | Server State Management |
-| TanStack Table   | Data Tables             |
-| Socket.IO Client | Real-time Communication |
-| Lucide React     | Icons                   |
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Node.js 20+
-- npm or yarn
-
-### Development
+## Local development
 
 ```bash
-# Install dependencies
+cd src/OpenWA/dashboard
 npm install
-
-# Start development server
 npm run dev
 ```
 
-Dashboard will be available at `http://localhost:2886`
-
-### Production Build
-
-```bash
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
-```
-
-## 📁 Project Structure
-
-```
-dashboard/
-├── src/
-│   ├── components/     # Reusable UI components
-│   ├── pages/          # Page components
-│   ├── hooks/          # Custom React hooks
-│   ├── services/       # API service layer
-│   ├── types/          # TypeScript definitions
-│   ├── utils/          # Utility functions
-│   ├── App.tsx         # Root component
-│   ├── App.css         # Global styles
-│   └── main.tsx        # Entry point
-├── public/             # Static assets
-├── index.html          # HTML template
-└── vite.config.ts      # Vite configuration
-```
-
-## 🔗 API Connection
-
-The dashboard connects to the OpenWA API backend. Configure the API URL in environment variables:
-
-```bash
-VITE_API_URL=http://localhost:2785
-```
-
-## 📄 License
-
-MIT License - Part of the [OpenWA](https://github.com/rmyndharis/OpenWA) project.
+The dashboard is expected to run as part of the AgentForge AppHost flow, with API calls proxied to the embedded OpenWA backend.

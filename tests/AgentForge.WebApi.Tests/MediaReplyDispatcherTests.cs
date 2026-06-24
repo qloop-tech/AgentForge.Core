@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AgentForge.Verticals.Abstractions;
 using AgentForge.WebApi.Services;
 using Microsoft.Extensions.Configuration;
@@ -5,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentForge.WebApi.Tests;
 
+[ExcludeFromCodeCoverage]
 public sealed class MediaReplyDispatcherTests
 {
     [Fact]

@@ -1,7 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
 using AgentForge.Verticals.Travel.Services;
 
 namespace AgentForge.Verticals.Travel.Tests;
 
+[ExcludeFromCodeCoverage]
 public sealed class TravelMediaServiceTests
 {
     [Fact]
@@ -24,6 +26,22 @@ public sealed class TravelMediaServiceTests
         var marker = TravelMediaService.ToMarker(media, "/images/");
 
         Assert.Equal("{{contact:Aria Travel Desk|+919999999999}}", marker);
+    }
+
+    [Theory]
+    [InlineData("destination-preview", "video", "{{video:/images/videos/kerala-preview.mp4|A quick preview of the Kerala backwaters experience.}}")]
+    [InlineData("audio-briefing", "audio", "{{audio:/images/audio/kerala-audio-brief.mp3|kerala-audio-brief.mp3}}")]
+    [InlineData("brochure", "document", "{{document:/images/documents/kerala-brochure.pdf|kerala-brochure.pdf|Kerala package brochure with itinerary highlights.}}")]
+    [InlineData("meeting-point", "location", "{{location:10.152,76.4019|Cochin International Airport|Airport Road, Kochi, Kerala}}")]
+    [InlineData("sticker", "sticker", "{{sticker:/images/stickers/aria-travel.png}}")]
+    public void Search_returns_approved_non_tour_media_marker_formats(string purpose, string mediaType, string expectedMarker)
+    {
+        var service = new TravelMediaService();
+
+        var media = service.Search(destination: "Kerala", purpose: purpose, mediaType: mediaType).First();
+        var marker = TravelMediaService.ToMarker(media, "/images/");
+
+        Assert.Equal(expectedMarker, marker);
     }
 
     [Fact]

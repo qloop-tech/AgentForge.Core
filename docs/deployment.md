@@ -101,10 +101,10 @@ This generates:
    docker exec agentforge-prodtest-openwa-1 node -e "fetch('http://127.0.0.1:2785/api/sessions/default',{headers:{'X-Api-Key': process.argv[1],'X-API-KEY': process.argv[1],'Accept':'application/json'}}).then(async r=>{console.log(r.status);console.log(await r.text());})" "$OPENWAAPIKEY"
    ```
 
-   If it is disconnected or stopped, restart it:
+   If it is disconnected or stopped, start it:
 
    ```bash
-   docker exec agentforge-prodtest-openwa-1 node -e "fetch('http://127.0.0.1:2785/api/sessions/default/restart',{method:'POST',headers:{'X-Api-Key': process.argv[1],'X-API-KEY': process.argv[1],'Accept':'application/json'}}).then(async r=>{console.log(r.status);console.log(await r.text());})" "$OPENWAAPIKEY"
+   docker exec agentforge-prodtest-openwa-1 node -e "fetch('http://127.0.0.1:2785/api/sessions/default/start',{method:'POST',headers:{'X-Api-Key': process.argv[1],'X-API-KEY': process.argv[1],'Accept':'application/json'}}).then(async r=>{console.log(r.status);console.log(await r.text());})" "$OPENWAAPIKEY"
    ```
 
 6. Validate the end-to-end message path by sending a signed webhook event into the deployed `webhook` service from inside the Compose network:

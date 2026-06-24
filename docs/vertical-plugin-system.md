@@ -3,6 +3,8 @@
 This document explains how AgentForge loads and runs an industry vertical at runtime using the
 actual classes and APIs in the codebase today.
 
+For the end-to-end message flow across webhook, queueing, AI, media, and OpenWA, see the [Architecture guide](Architecture.md).
+
 AgentForge is split into two layers:
 
 - a **generic platform runtime** that owns hosting, WhatsApp transport, AI orchestration, and MCP transport
@@ -98,7 +100,7 @@ The plugin boundary lives in `src/AgentForge.Verticals.Abstractions/VerticalCont
 | `IScheduledActionHandler` | `HandleAsync(ScheduledAction, CancellationToken)` | Lets the generic scheduler delegate follow-up/reminder behavior to the active vertical. |
 | `IVerticalPluginLoader` | `Load()` | Abstracts how the active vertical plugin is resolved. |
 | `IVerticalDeploymentValidator` | `ValidateDeployment()` | Optional hook for plugin assemblies loaded via `AssemblyLoadContext` to fail fast when required deployment files are missing. |
-| `IMessageSender` | `SendTextAsync(...)`, `SendImageAsync(...)` | Generic send surface used by WebApi services and vertical handlers without exposing provider-specific APIs. |
+| `IMessageSender` | `SendTextAsync(...)`, `SendImageAsync(...)`, `SendVideoAsync(...)`, `SendAudioAsync(...)`, `SendDocumentAsync(...)`, `SendLocationAsync(...)`, `SendContactAsync(...)`, `SendStickerAsync(...)` | Generic send surface used by WebApi services and vertical handlers without exposing provider-specific APIs. |
 
 ## How a vertical is selected
 

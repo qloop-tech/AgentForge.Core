@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -8,6 +9,7 @@ using Microsoft.Extensions.Options;
 
 namespace AgentForge.WebApi.Tests;
 
+[ExcludeFromCodeCoverage]
 public sealed class OpenWaApiClientTests
 {
     [Fact]

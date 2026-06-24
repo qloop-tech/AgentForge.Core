@@ -48,7 +48,7 @@ public sealed partial class MediaMarkerParser
 
         var matches = MediaMarker().Matches(reply);
         var markers = matches
-            .Select(match => ParseMatch(match))
+            .Select(ParseMatch)
             .Where(marker => marker.IsValid)
             .ToArray();
         var text = MediaMarker().Replace(reply, string.Empty).Trim();

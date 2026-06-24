@@ -1,4 +1,5 @@
 using AgentForge.WebApi.Queue;
+using AgentForge.Verticals.Abstractions;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgentForge.WebApi.Endpoints;
@@ -6,6 +7,7 @@ namespace AgentForge.WebApi.Endpoints;
 public static class WebhookEndpoint
 {
     private const int MaxWebhookBodyBytes = 64 * 1024;
+    private const string UnsupportedInboundMediaReply = "Only Text is supported for now";
 
     public static IEndpointRouteBuilder MapWebhookEndpoints(this IEndpointRouteBuilder app)
     {
@@ -32,6 +34,7 @@ public static class WebhookEndpoint
         OpenWaWebhookSignatureValidator signatureValidator,
         OpenWaWebhookIdempotencyStore idempotencyStore,
         WhatsAppMessageQueue messageQueue,
+        IMessageSender messageSender,
         ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
@@ -93,22 +96,71 @@ public static class WebhookEndpoint
 
             return Results.BadRequest("Invalid message payload.");
         }
+        return await HandleInboundMessageAsync(
+                message,
+                dedupeKey,
+                payload.DeliveryId,
+                dedupeRegistered,
+                messageQueue.EnqueueAsync,
+                messageSender.SendTextAsync,
+                idempotencyStore.RemoveAsync,
+                logger,
+                ct)
+            .ConfigureAwait(false);
+    }
+
+    internal static async Task<IResult> HandleInboundMessageAsync(
+        OpenWaMessage? message,
+        string? dedupeKey,
+        string? deliveryId,
+        bool dedupeRegistered,
+        Func<string, string, string?, string?, CancellationToken, Task> enqueueAsync,
+        Func<string, string, CancellationToken, Task> sendTextAsync,
+        Func<string?, Task> removeDedupeAsync,
+        ILogger logger,
+        CancellationToken ct)
+    {
         var phoneNumber = message?.GetSender();
-        var body = message?.GetBody();
-        if (message is null || message.FromMe == true || string.IsNullOrWhiteSpace(phoneNumber) || string.IsNullOrWhiteSpace(body))
+        if (message is null || message.FromMe == true || string.IsNullOrWhiteSpace(phoneNumber))
+        {
+            return Results.Ok();
+        }
+
+        if (message.HasUnsupportedInboundMedia())
+        {
+            try
+            {
+                await sendTextAsync(phoneNumber, UnsupportedInboundMediaReply, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                if (dedupeRegistered)
+                {
+                    await removeDedupeAsync(dedupeKey).ConfigureAwait(false);
+                }
+
+                logger.LogError(ex, "Failed to send unsupported inbound media notice to {Phone}", phoneNumber);
+                return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+            }
+
+            return Results.Ok();
+        }
+
+        var body = message.GetBody();
+        if (string.IsNullOrWhiteSpace(body))
         {
             return Results.Ok();
         }
 
         try
         {
-            await messageQueue.EnqueueAsync(phoneNumber, body, dedupeKey, payload.DeliveryId, ct).ConfigureAwait(false);
+            await enqueueAsync(phoneNumber, body, dedupeKey, deliveryId, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             if (dedupeRegistered)
             {
-                await idempotencyStore.RemoveAsync(dedupeKey).ConfigureAwait(false);
+                await removeDedupeAsync(dedupeKey).ConfigureAwait(false);
             }
 
             logger.LogError(ex, "Failed to enqueue OpenWA webhook message from {Phone}", phoneNumber);
