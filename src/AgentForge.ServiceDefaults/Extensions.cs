@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
+using System.Text.Json;
 
 namespace Microsoft.Extensions.Hosting;
 
@@ -125,18 +127,42 @@ public static class Extensions
 
     public static WebApplication MapDefaultEndpoints(this WebApplication app)
     {
-        // Adding health checks endpoints to applications in non-development environments has security implications.
-        // See https://aka.ms/aspire/healthchecks for details before enabling these endpoints in non-development environments.
-        if (!app.Environment.IsDevelopment()) return app;
         // All health checks must pass for app to be considered ready to accept traffic after starting
-        app.MapHealthChecks(HealthEndpointPath);
+        app.MapHealthChecks(HealthEndpointPath, new HealthCheckOptions
+        {
+            ResponseWriter = WriteHealthResponseAsync
+        });
 
         // Only health checks tagged with the "live" tag must pass for app to be considered alive
         app.MapHealthChecks(AlivenessEndpointPath, new HealthCheckOptions
         {
-            Predicate = r => r.Tags.Contains("live")
+            Predicate = r => r.Tags.Contains("live"),
+            ResponseWriter = WriteHealthResponseAsync
         });
 
         return app;
+    }
+
+    private static async Task WriteHealthResponseAsync(HttpContext context, HealthReport report)
+    {
+        context.Response.ContentType = "application/json";
+
+        var payload = new
+        {
+            status = report.Status.ToString(),
+            totalDuration = report.TotalDuration.TotalMilliseconds,
+            entries = report.Entries.ToDictionary(
+                entry => entry.Key,
+                entry => new
+                {
+                    status = entry.Value.Status.ToString(),
+                    description = entry.Value.Description,
+                    duration = entry.Value.Duration.TotalMilliseconds,
+                    error = entry.Value.Exception?.Message
+                })
+        };
+
+        await context.Response.WriteAsync(JsonSerializer.Serialize(payload, JsonSerializerOptions.Web))
+            .ConfigureAwait(false);
     }
 }

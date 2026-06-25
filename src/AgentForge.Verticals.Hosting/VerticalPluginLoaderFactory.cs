@@ -15,6 +15,8 @@ public static class VerticalPluginLoaderFactory
         if (!string.IsNullOrWhiteSpace(pluginRoot) && !string.IsNullOrWhiteSpace(verticalId))
             return new AlcVerticalPluginLoader(Path.Combine(pluginRoot, verticalId));
 
-        return new DefaultVerticalPluginLoader();
+        throw new InvalidOperationException(
+            "No vertical plugin was configured. Set VERTICAL_PLUGIN_PATH to a plugin DLL/folder, " +
+            "or set VERTICAL_PLUGIN_ROOT and VERTICAL_ID so AgentForge can resolve '<root>/<vertical-id>'.");
     }
 }

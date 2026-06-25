@@ -2,14 +2,15 @@ using AgentForge.Verticals.Abstractions;
 
 namespace AgentForge.Verticals.Travel;
 
-public sealed class TravelScheduledActionHandler(IMessageSender messageSender) : IScheduledActionHandler
+public sealed class TravelScheduledActionHandler : IScheduledActionHandler
 {
-    public async Task HandleAsync(ScheduledAction action, CancellationToken ct = default)
+    public Task<IReadOnlyList<ScheduledMessage>> HandleAsync(ScheduledAction action, CancellationToken ct = default)
     {
-        switch (action.ActionType)
+        IReadOnlyList<ScheduledMessage> messages = action.ActionType switch
         {
-            case TravelScheduledActionTypes.PreDeparture7Day:
-                await messageSender.SendTextAsync(
+            TravelScheduledActionTypes.PreDeparture7Day =>
+            [
+                new ScheduledMessage(
                     action.ChatId,
                     $$"""
                     ⏰ *7 Days to Go!*
@@ -22,12 +23,12 @@ public sealed class TravelScheduledActionHandler(IMessageSender messageSender) :
                     • Download offline maps
                     • Charge all devices
                     • Inform your bank about travel
-                    """,
-                    ct).ConfigureAwait(false);
-                return;
+                    """)
+            ],
 
-            case TravelScheduledActionTypes.PreDeparture1Day:
-                await messageSender.SendTextAsync(
+            TravelScheduledActionTypes.PreDeparture1Day =>
+            [
+                new ScheduledMessage(
                     action.ChatId,
                     $$"""
                     🚀 *Tomorrow is the day!*
@@ -38,32 +39,30 @@ public sealed class TravelScheduledActionHandler(IMessageSender messageSender) :
                     📞 Driver contact: +91 98765 43210
                     🎒 Keep your documents handy
                     Have an amazing trip! ✈️
-                    """,
-                    ct).ConfigureAwait(false);
-                return;
+                    """)
+            ],
 
-            case TravelScheduledActionTypes.DepartureDay:
-                await messageSender.SendTextAsync(
+            TravelScheduledActionTypes.DepartureDay =>
+            [
+                new ScheduledMessage(
                     action.ChatId,
                     $$"""
                     🎉 *Today's the Day! Your {{action.ItemName}} adventure begins!*
 
                     Safe travels and make wonderful memories! 📸
-                    """,
-                    ct).ConfigureAwait(false);
-                return;
+                    """)
+            ],
 
-            case TravelScheduledActionTypes.PostTripFeedback:
-                await messageSender.SendTextAsync(
+            TravelScheduledActionTypes.PostTripFeedback =>
+            [
+                new ScheduledMessage(
                     action.ChatId,
                     $$"""
                     🎉 *Welcome back from your {{action.ItemName}} adventure!*
 
                     We hope you had an amazing time! Your feedback helps us improve. 🙏
-                    """,
-                    ct).ConfigureAwait(false);
-
-                await messageSender.SendTextAsync(
+                    """),
+                new ScheduledMessage(
                     action.ChatId,
                     """
                     ⭐ *We'd love your feedback!*
@@ -77,12 +76,12 @@ public sealed class TravelScheduledActionHandler(IMessageSender messageSender) :
                     5️⃣  — Excellent
 
                     Just reply with *1*, *2*, *3*, *4*, or *5* 👆
-                    """,
-                    ct).ConfigureAwait(false);
-                return;
+                    """)
+            ],
 
-            default:
-                throw new InvalidOperationException($"Unsupported travel scheduled action type '{action.ActionType}'.");
-        }
+            _ => throw new InvalidOperationException($"Unsupported travel scheduled action type '{action.ActionType}'.")
+        };
+
+        return Task.FromResult(messages);
     }
 }

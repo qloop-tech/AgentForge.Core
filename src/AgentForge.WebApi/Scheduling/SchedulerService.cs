@@ -8,6 +8,7 @@ namespace AgentForge.WebApi.Scheduling;
 /// </summary>
 public sealed class SchedulerService(
     IServiceScopeFactory scopeFactory,
+    IMessageSender messageSender,
     ILogger<SchedulerService> logger) : BackgroundService
 {
     private sealed class ScheduledActionJob(ScheduledAction action)
@@ -76,7 +77,11 @@ public sealed class SchedulerService(
             {
                 await using var scope = scopeFactory.CreateAsyncScope();
                 var scheduledActionHandler = scope.ServiceProvider.GetRequiredService<IScheduledActionHandler>();
-                await scheduledActionHandler.HandleAsync(job.Action, ct).ConfigureAwait(false);
+                var messages = await scheduledActionHandler.HandleAsync(job.Action, ct).ConfigureAwait(false);
+                foreach (var message in messages)
+                {
+                    await messageSender.SendTextAsync(message.ChatId, message.Text, ct).ConfigureAwait(false);
+                }
 
                 job.Sent = true;
                 logger.LogInformation(

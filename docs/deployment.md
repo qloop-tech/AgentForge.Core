@@ -37,7 +37,7 @@ This generates:
 
 - `AgentForge.WebApi` and `AgentForge.McpHost` receive `VERTICAL_ID`, `VERTICAL_PLUGIN_ROOT`, and `VERTICAL_PLUGIN_PATH` automatically in publish mode.
 - If `CUSTOMER_CONFIG_SOURCE_PATH` is set on the AppHost, both hosts also receive `CUSTOMER_CONFIG_PATH` and the mounted folder is available read-only for runtime descriptor overrides.
-- During local `aspire start`, `vertical-plugin-path` and `customer-config-path` are exposed as optional Aspire parameter overrides with friendly dashboard labels/placeholders, but they default to blank so normal startup does not require dashboard input.
+- During local `aspire start`, `vertical-plugin-path` and `customer-config-path` are exposed as optional Aspire parameter overrides with friendly dashboard labels/placeholders. If no plugin path or `VERTICAL_PLUGIN_ROOT` + `VERTICAL_ID` is configured, WebApi and McpHost intentionally report unhealthy readiness instead of falling back to Travel.
 - `DevTunnel` and `MCP Inspector` are intentionally **local-only** and are not included in published Compose output.
 - Published Compose exposes the `webhook` service on `WEBHOOK_HOST_PORT` and the OpenWA dashboard on `OPENWA_DASHBOARD_HOST_PORT` so you can front them with a VPS public IP, reverse proxy, or an external tunnel such as Microsoft Dev Tunnels, ngrok, or Cloudflare Tunnel.
 - To publish a different vertical later, publish that plugin to `artifacts/plugins/<vertical-id>/` and set `VERTICAL_ID` (and optionally `VERTICAL_PLUGIN_SOURCE_PATH` and `CUSTOMER_CONFIG_SOURCE_PATH`) before running `aspire publish`.

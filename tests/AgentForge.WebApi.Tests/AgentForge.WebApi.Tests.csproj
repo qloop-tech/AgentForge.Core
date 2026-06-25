@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AgentForge.WebApi\AgentForge.WebApi.csproj" />
+    <ProjectReference Include="..\..\src\Verticals\AgentForge.Verticals.Travel\AgentForge.Verticals.Travel.csproj" />
   </ItemGroup>
 
 </Project>

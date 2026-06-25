@@ -6,18 +6,11 @@ using AgentForge.WebApi.Scheduling;
 using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
-var verticalPluginLoader = VerticalPluginLoaderFactory.Create(
-    builder.Configuration["VERTICAL_PLUGIN_PATH"],
-    builder.Configuration["VERTICAL_PLUGIN_ROOT"],
-    builder.Configuration["VERTICAL_ID"]);
-var verticalPlugin = verticalPluginLoader.Load();
-verticalPlugin.ConfigureConfiguration(builder.Configuration);
+var verticalPluginBootstrapState = VerticalPluginBootstrapState.Create(builder.Configuration);
 
 builder.AddServiceDefaults();
-builder.Services.AddSingleton(verticalPluginLoader);
-builder.Services.AddSingleton(verticalPlugin);
-builder.Services.AddSingleton<IVerticalDescriptor>(sp => sp.GetRequiredService<IVerticalPlugin>().CreateDescriptor(sp));
-verticalPlugin.RegisterCommonServices(builder.Services);
+builder.Services.AddVerticalPluginBootstrap(verticalPluginBootstrapState);
+verticalPluginBootstrapState.Plugin?.RegisterCommonServices(builder.Services);
 builder.Services
     .AddOptions<OpenWaWebhookSecurityOptions>()
     .Configure(options => options.Secret = builder.Configuration["OPENWA_WEBHOOK_SECRET"] ?? string.Empty)
@@ -62,7 +55,7 @@ builder.Services.AddSingleton<IAgentFactory, VerticalAgentFactory>();
 builder.Services.AddScoped<AgentChatService>();
 
 // ─── Bot Handlers (used by scheduler for reminders/post-trip) ─────────────────
-verticalPlugin.RegisterWebApiServices(builder.Services);
+verticalPluginBootstrapState.Plugin?.RegisterWebApiServices(builder.Services);
 
 // ─── Background Services ──────────────────────────────────────────────────────
 builder.Services.AddSingleton<WhatsAppMessageQueue>();
@@ -91,7 +84,6 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 var app = builder.Build();
-_ = app.Services.GetRequiredService<IVerticalDescriptor>();
 
 app.UseForwardedHeaders();
 app.UseVerticalAssets();

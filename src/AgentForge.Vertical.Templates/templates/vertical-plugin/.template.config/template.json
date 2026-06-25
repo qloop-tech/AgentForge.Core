@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "AgentForge",
+  "classifications": [ "AgentForge", "MCP", "Vertical Plugin" ],
+  "identity": "AgentForge.Vertical.Templates.VerticalPlugin",
+  "name": "AgentForge Vertical Plugin",
+  "shortName": "agentforge-vertical",
+  "sourceName": "AgentForge.Vertical.Template",
+  "preferNameDirectory": true,
+  "description": "Creates an external AgentForge vertical plugin class library.",
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "symbols": {
+    "verticalId": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "sample",
+      "replaces": "sample",
+      "description": "Stable vertical id used by VERTICAL_ID and plugin publish folders."
+    },
+    "displayName": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "Sample Assistant",
+      "replaces": "Sample Assistant",
+      "description": "Human-readable vertical display name."
+    }
+  }
+}

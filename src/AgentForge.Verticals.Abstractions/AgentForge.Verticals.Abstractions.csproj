@@ -4,11 +4,22 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageId>AgentForge.Verticals.Abstractions</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>AgentForge</Authors>
+    <Description>Contracts for building external AgentForge vertical plugins.</Description>
+    <PackageTags>agentforge;vertical;plugin;mcp</PackageTags>
+    <PackageOutputPath>../../artifacts/packages</PackageOutputPath>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.7" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.7" />
   </ItemGroup>
 
 </Project>

@@ -14,13 +14,13 @@
 
 **AgentForge** is an open-source WhatsApp AI platform for service businesses. It gives you a reusable host runtime for WhatsApp messaging, agent orchestration, MCP tool execution, and Aspire-based local deployment — while letting each industry vertical plug in its own tools, prompts, workflows, and data.
 
-The current in-tree vertical is **travel** (`AgentForge.Verticals.Travel`), which acts as both:
+The current sample vertical is **travel** (`AgentForge.Verticals.Travel`), which acts as both:
 
 - the working reference implementation
 - the first commercial wedge
 - the example of how AgentForge can later extend into industries such as salons, clinics, restaurants, or other service businesses
 
-Today, you can clone the repo, configure the secrets, and run the travel experience end to end. Under the hood, though, the architecture is already oriented around **dynamic vertical plugins**, not a permanently travel-only codebase.
+Today, you can clone the repo, publish the sample travel plugin, configure the secrets, and run the travel experience end to end. Under the hood, the architecture is **plugin-first**: WebApi and McpHost require an explicit vertical plugin path and report unhealthy readiness when the plugin is missing or invalid.
 
 ---
 
@@ -30,6 +30,7 @@ Today, you can clone the repo, configure the secrets, and run the travel experie
 |---|---|
 | [Architecture](docs/Architecture.md) | End-to-end message flow sequence diagram, roles, Redis queueing, inbound media guard, outbound media dispatch, and platform boundaries |
 | [Vertical Plugin System](docs/vertical-plugin-system.md) | The class-level plugin contract and how to author another industry vertical |
+| [Plugin Development Getting Started](docs/plugin-development-getting-started.md) | Tutorial for creating, publishing, and loading an external vertical plugin |
 | [Deployment Guide](docs/deployment.md) | Aspire-generated Docker Compose, production-like local demos, and Cloudflare tunnel workflow |
 | [OpenWA README](src/OpenWA/README.md) | The embedded WhatsApp API gateway and dashboard source used by AgentForge |
 | [Repository Guidelines](docs/repository-guidelines.md) | Project structure, build/test commands, style rules, PR guidance, and security tips |
@@ -115,7 +116,7 @@ whatsapp-ai-travel-agent/
 │   ├── AgentForge.AppHost/          # .NET Aspire orchestration — defines all resources, dependencies, secrets
 │   ├── AgentForge.ServiceDefaults/  # Shared defaults — OpenTelemetry, health checks, HTTP resilience, service discovery
 │   ├── OpenWA/                      # First-party OpenWA API and Vite dashboard source, orchestrated by AppHost
-│   ├── AgentForge.Verticals.Abstractions/ # Shared contracts for vertical metadata, messaging, and scheduled actions
+│   ├── AgentForge.Verticals.Abstractions/ # NuGet-ready contracts for vertical metadata, MCP, and scheduled message intents
 │   ├── AgentForge.Verticals.Hosting/ # Shared loader boundary used by both hosts to resolve the active vertical
 │   ├── AgentForge.McpHost/          # Generic MCP host — loads tools/resources from the active vertical plugin
 │   ├── AgentForge.WebApi/           # AI gateway — receives webhooks, runs the active vertical agent, sends WhatsApp replies
@@ -143,7 +144,7 @@ This repository is now structured so the **host runtime stays generic** while ea
 - `AgentForge.WebApi` — webhook handling, session management, queueing, agent execution, OpenWA sending
 - `AgentForge.McpHost` — generic MCP host that loads tools/resources from the active vertical
 - `AgentForge.Verticals.Abstractions` — shared plugin contracts such as `IVerticalPlugin`, `IVerticalDescriptor`, `IVerticalMcpRegistrar`, and `IScheduledActionHandler`
-- `AgentForge.Verticals.Hosting` — default and `AssemblyLoadContext`-based plugin loaders
+- `AgentForge.Verticals.Hosting` — `AssemblyLoadContext`-based plugin loading, bootstrap state, and plugin health checks
 
 ### Vertical-owned pieces
 
@@ -167,20 +168,21 @@ At a high level, a vertical plugs in by implementing:
 
 ### Runtime selection model
 
-AgentForge supports three runtime modes today:
+AgentForge requires an explicit vertical plugin configuration:
 
-1. **Default fallback** — if no plugin env vars are set, both hosts use the in-tree travel plugin
-2. **Direct path** — set `VERTICAL_PLUGIN_PATH` to an external plugin folder or DLL
-3. **Plugin root + id** — set `VERTICAL_PLUGIN_ROOT` and `VERTICAL_ID` so the loader resolves `<root>/<id>`
+1. **Direct path** — set `VERTICAL_PLUGIN_PATH` to an external plugin folder or DLL
+2. **Plugin root + id** — set `VERTICAL_PLUGIN_ROOT` and `VERTICAL_ID` so the loader resolves `<root>/<id>`
+
+If no plugin is configured or the plugin cannot load, `AgentForge.WebApi` and `AgentForge.McpHost` stay running but report `Unhealthy` on `/health` so Aspire Dashboard shows the bootstrap problem clearly.
 
 ### Creating a new industry vertical
 
-To add a new industry such as salon, clinic, or restaurant:
+To add a new industry such as school, clinic, or salon:
 
-1. create a new class library under `src/Verticals/AgentForge.Verticals.<Vertical>/`
-2. implement the vertical descriptor, MCP registrar, plugin entry point, and scheduled action handler
-3. place that vertical's tools/resources/services/data in the new assembly
-4. publish it to `artifacts/plugins/<vertical-id>/`
+1. install `AgentForge.Vertical.Templates`
+2. create a new external class library with `dotnet new agentforge-vertical`
+3. reference `AgentForge.Verticals.Abstractions` and implement the descriptor, MCP registrar, plugin entry point, tools, resources, data, and optional scheduled action handler
+4. publish the plugin bundle to `artifacts/plugins/<vertical-id>/`
 5. point `VERTICAL_PLUGIN_PATH` or `VERTICAL_PLUGIN_ROOT` + `VERTICAL_ID` at it
 
 The result is the same generic WhatsApp host runtime with a different business-specific capability set loaded at runtime.
@@ -228,13 +230,26 @@ dotnet user-secrets set "ConnectionStrings:ai-foundry" "Endpoint=https://...;Key
 
 > **Tip:** `openWaApiKey` protects the OpenWA REST API. `openWaWebhookSecret` is a separate shared secret used for OpenWA's HMAC-signed webhook delivery to `/webhook`. Keep them different.
 
-### 3. Log in to DevTunnel
+### 3. Publish and configure the sample plugin
+
+The core platform does not silently fall back to Travel. For the sample experience, publish the Travel plugin bundle and point the local AppHost at it:
+
+```bash
+cd ../..
+dotnet publish src/Verticals/AgentForge.Verticals.Travel/AgentForge.Verticals.Travel.csproj -c Release -o artifacts/plugins/travel
+cd src/AgentForge.AppHost
+dotnet user-secrets set "Parameters:vertical-plugin-path" "$(pwd)/../../artifacts/plugins/travel"
+```
+
+For a new external plugin, use `dotnet new agentforge-vertical` and publish that plugin folder instead.
+
+### 4. Log in to DevTunnel
 
 ```bash
 devtunnel user login
 ```
 
-### 4. Start the application
+### 5. Start the application
 
 ```bash
 aspire start
@@ -247,7 +262,7 @@ Aspire will:
 
 Open the Aspire Dashboard link printed in the terminal to monitor all services.
 
-### 5. Connect WhatsApp (scan QR)
+### 6. Connect WhatsApp (scan QR)
 
 Follow the **OpenWA Dashboard Configuration** section below to link your WhatsApp account.
 
@@ -345,8 +360,8 @@ Aspire parameters are used for **promptable runtime inputs**. Graph-shaping AppH
 | `VERTICAL_PLUGIN_ROOT` | Optional env var on `AgentForge.AppHost` | Container-side root path mounted into `AgentForge.WebApi` and `AgentForge.McpHost` during Compose publish (`/app/plugins` by default) |
 | `VERTICAL_PLUGIN_SOURCE_PATH` | Optional env var on `AgentForge.AppHost` | Host-side plugin folder to bind-mount during Compose publish (defaults to `../../artifacts/plugins/{VERTICAL_ID}` relative to `src/AgentForge.AppHost/`) |
 | `CUSTOMER_CONFIG_SOURCE_PATH` | Optional env var on `AgentForge.AppHost` | Host-side customer config folder to bind-mount during Compose publish; when set, the AppHost also passes `CUSTOMER_CONFIG_PATH` into both hosts |
-| `CUSTOMER_CONFIG_PATH` | Optional env var on `AgentForge.WebApi` / `AgentForge.McpHost` | Path to a customer config folder containing `customer-profile.json` and optionally `prompt.md`; when unset, the travel plugin falls back to its bundled defaults |
-| `VERTICAL_PLUGIN_PATH` | Optional env var on `AgentForge.WebApi` / `AgentForge.McpHost` | Path to an external published vertical plugin folder or DLL; when unset, the in-tree travel plugin is used |
+| `CUSTOMER_CONFIG_PATH` | Optional env var on `AgentForge.WebApi` / `AgentForge.McpHost` | Path to a customer config folder containing `customer-profile.json` and optionally `prompt.md`; when unset, the active plugin can use its bundled defaults |
+| `VERTICAL_PLUGIN_PATH` | Env var on `AgentForge.WebApi` / `AgentForge.McpHost` | Path to an external published vertical plugin folder or DLL |
 
 ### Optional dashboard local overrides
 
@@ -355,10 +370,10 @@ When you run `aspire start` locally, the AppHost exposes these as Aspire paramet
 - `vertical-plugin-path` — optional local override for an external plugin folder or DLL
 - `customer-config-path` — optional local override for a customer config folder
 
-They default to blank, so local startup no longer blocks on unresolved parameters. Blank means:
+They default to blank, so local startup no longer blocks on unresolved parameters before the dashboard opens. Blank plugin configuration means:
 
-- built-in in-tree travel plugin
-- bundled travel customer config
+- no plugin loaded; `/health` reports `Unhealthy` until a valid plugin is configured
+- the active plugin uses bundled customer config, when it provides bundled defaults
 
 If you want to preconfigure these overrides without using the dashboard, the canonical Aspire parameter keys are `Parameters:vertical-plugin-path` and `Parameters:customer-config-path`. For env-style configuration, the AppHost also accepts these shell-friendly aliases:
 
@@ -367,7 +382,7 @@ If you want to preconfigure these overrides without using the dashboard, the can
 
 Legacy `VERTICAL_PLUGIN_PATH` and `CUSTOMER_CONFIG_PATH` environment variables are still accepted as compatibility fallbacks for local runs.
 
-The dashboard parameters are therefore an **optional override UX**, not a required setup step. In contrast, values like `VERTICAL_ID`, `VERTICAL_PLUGIN_SOURCE_PATH`, and `CUSTOMER_CONFIG_SOURCE_PATH` still shape the AppHost graph or publish output, so they remain standard AppHost configuration rather than dashboard-entered parameters.
+The dashboard parameters are therefore an **optional override UX**. A valid plugin still must be configured either with `vertical-plugin-path` / `VERTICAL_PLUGIN_PATH` or with `VERTICAL_PLUGIN_ROOT` + `VERTICAL_ID`. Values like `VERTICAL_ID`, `VERTICAL_PLUGIN_SOURCE_PATH`, and `CUSTOMER_CONFIG_SOURCE_PATH` still shape the AppHost graph or publish output, so they remain standard AppHost configuration rather than dashboard-entered parameters.
 
 ### Customer config pack layout
 

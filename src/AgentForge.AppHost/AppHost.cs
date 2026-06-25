@@ -53,7 +53,7 @@ var openWa = builder.AddNodeApp("openwa", "../OpenWA", "dist/main")
     .WithEnvironment("DATABASE_PASSWORD", openWaPostgresPassword)
     .WithEnvironment("REDIS_HOST", openWaRedisEndpoint.Property(EndpointProperty.Host))
     .WithEnvironment("REDIS_PORT", openWaRedisEndpoint.Property(EndpointProperty.Port))
-    .WithEnvironment("REDIS_PASSWORD", openWaRedis.Resource.PasswordParameter)
+    .WithEnvironment("REDIS_PASSWORD", openWaRedis.Resource.PasswordParameter!)
     .WithEnvironment("REDIS_TLS", settings.IsPublishMode ? "true" : "false")
     .WithEnvironment("SESSION_DATA_PATH", $"{openWaDataPath}/sessions")
     .WithEnvironment("STORAGE_TYPE", "local")
@@ -81,12 +81,14 @@ openWaDashboard.PublishAsStaticWebsite("/api", openWa, options =>
 var openWaEndpoint = openWa.Resource.GetEndpoint("http");
 
 var mcpServer = builder.AddProject<AgentForge_McpHost>("mcpserver")
+    .WithHttpHealthCheck("/health")
     .WithLocalVerticalInputs(localParameters)
     .WithPublishVerticalRuntime(settings, "mcpserver");
 
 var aiFoundry = builder.AddConnectionString("ai-foundry");
 
 var webhookApi = builder.AddProject<AgentForge_WebApi>("webhook")
+    .WithHttpHealthCheck("/health")
     .WithReference(openWaEndpoint)
     .WithReference(mcpServer)
     .WithReference(aiFoundry)

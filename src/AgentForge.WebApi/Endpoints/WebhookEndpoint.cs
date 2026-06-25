@@ -1,5 +1,6 @@
 using AgentForge.WebApi.Queue;
 using AgentForge.Verticals.Abstractions;
+using AgentForge.Verticals.Hosting;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgentForge.WebApi.Endpoints;
@@ -34,11 +35,22 @@ public static class WebhookEndpoint
         OpenWaWebhookSignatureValidator signatureValidator,
         OpenWaWebhookIdempotencyStore idempotencyStore,
         WhatsAppMessageQueue messageQueue,
+        VerticalPluginBootstrapState verticalPluginBootstrapState,
+        IServiceProvider serviceProvider,
         IMessageSender messageSender,
         ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
         var logger = loggerFactory.CreateLogger(nameof(WebhookEndpoint));
+        if (!verticalPluginBootstrapState.TryValidateReady(serviceProvider, out var pluginError))
+        {
+            logger.LogWarning("Rejecting OpenWA webhook because the vertical plugin is unavailable. {Error}", pluginError);
+            return Results.Problem(
+                title: "Vertical plugin unavailable",
+                detail: pluginError,
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
         var validation = await signatureValidator.ValidateAsync(request, ct).ConfigureAwait(false);
         if (!validation.IsValid)
            return Results.BadRequest("Missing or invalid webhook signature.");

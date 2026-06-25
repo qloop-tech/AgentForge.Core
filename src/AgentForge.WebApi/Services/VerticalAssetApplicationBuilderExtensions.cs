@@ -1,4 +1,5 @@
 using AgentForge.Verticals.Abstractions;
+using AgentForge.Verticals.Hosting;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.FileProviders;
 
@@ -9,6 +10,12 @@ public static class VerticalAssetApplicationBuilderExtensions
     public static IApplicationBuilder UseVerticalAssets(this IApplicationBuilder app)
     {
         ArgumentNullException.ThrowIfNull(app);
+
+        var bootstrapState = app.ApplicationServices.GetRequiredService<VerticalPluginBootstrapState>();
+        if (!bootstrapState.TryValidateReady(app.ApplicationServices, out _))
+        {
+            return app;
+        }
 
         var descriptor = app.ApplicationServices.GetRequiredService<IVerticalDescriptor>();
         var prefix = NormalizeRequestPath(descriptor.AssetPathPrefix);

@@ -25,7 +25,7 @@ internal sealed class AppHostLocalParameters(
             parameterName: "vertical-plugin-path",
             legacyConfigurationKey: "VERTICAL_PLUGIN_PATH",
             label: "Vertical plugin path",
-            description: "Optional local override for an external vertical plugin folder or DLL. Leave blank to use the built-in in-tree vertical.",
+            description: "Optional local override for an external vertical plugin folder or DLL. Leave blank only when VERTICAL_PLUGIN_ROOT + VERTICAL_ID are configured elsewhere; missing plugin config makes WebApi and McpHost unhealthy.",
             placeholder: "/Users/you/.../artifacts/plugins/travel");
         var customerConfigPath = AddOptionalPathOverride(
             builder,

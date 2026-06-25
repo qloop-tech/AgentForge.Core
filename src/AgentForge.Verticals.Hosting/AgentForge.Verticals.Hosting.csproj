@@ -2,7 +2,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AgentForge.Verticals.Abstractions\AgentForge.Verticals.Abstractions.csproj" />
-    <ProjectReference Include="..\Verticals\AgentForge.Verticals.Travel\AgentForge.Verticals.Travel.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
   </ItemGroup>
 
   <PropertyGroup>
