@@ -39,7 +39,7 @@ public sealed class TestVerticalMcpRegistrar : IVerticalMcpRegistrar
 
 public sealed class TestVerticalDescriptor : IVerticalDescriptor
 {
-    public string Id => "test";
+    public string VerticalId => "test";
 
     public string DisplayName => "Test Vertical";
 
@@ -51,7 +51,7 @@ public sealed class TestVerticalDescriptor : IVerticalDescriptor
 
     public string McpServerName => "test-mcp";
 
-    public string AssetRequestPathPrefix => "/test-assets";
+    public string AssetPathPrefix => "/test-assets";
 
     public string AssetRootPath => AppContext.BaseDirectory;
 
