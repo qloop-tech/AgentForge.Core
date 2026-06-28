@@ -8,7 +8,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AgentForge.ServiceDefaults\AgentForge.ServiceDefaults.csproj" />
-    <ProjectReference Include="..\AgentForge.Verticals.Abstractions\AgentForge.Verticals.Abstractions.csproj" />
     <ProjectReference Include="..\AgentForge.Verticals.Hosting\AgentForge.Verticals.Hosting.csproj" />
   </ItemGroup>
 
@@ -24,6 +23,7 @@
     <PackageReference Include="Microsoft.Agents.AI.Hosting" Version="1.5.0-preview.260507.1" />
     <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.5.0" />
     <PackageReference Include="ModelContextProtocol" Version="1.3.0" />
+    <PackageReference Include="AgentForge.Verticals.Abstractions" Version="0.1.0" />
   </ItemGroup>
 
 </Project>

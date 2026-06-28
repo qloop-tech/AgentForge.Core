@@ -142,12 +142,12 @@ File-like media must resolve to approved vertical assets under the active vertic
 | **AgentForge.AppHost**      | Aspire orchestration, OpenWA, Redis, PostgreSQL, WebApi, McpHost, DevTunnel, MCP Inspector, and publish-time Compose shape.                    |
 | **AgentForge.WebApi**       | Webhook ingestion, dedupe, queueing, agent execution, outbound sending, media dispatch, vertical asset serving, and scheduled action dispatch. |
 | **AgentForge.McpHost**      | MCP transport and discovery of the active vertical's tools/resources.                                                                          |
-| **AgentForge.Verticals.\*** | Domain-specific prompts, tools, resources, data, assets, customer config, and scheduled action behavior.                                       |
+| **External vertical plugin** | Domain-specific prompts, tools, resources, data, assets, customer config, and scheduled action behavior.                                      |
 | **OpenWA**                  | WhatsApp session management, webhook delivery, REST send endpoints, dashboard, and provider-side persistence.                                  |
 
 ## Current Reference Vertical
 
-The built-in travel vertical demonstrates the extension model:
+The external [AgentForge.Verticals.Travel](https://github.com/qloop-tech/AgentForge.Verticals.Travel) repo demonstrates the extension model:
 
 - `TravelVerticalPlugin` implements the plugin entry point.
 - `TravelMcpRegistrar` exposes the travel tools/resources assembly.
@@ -157,4 +157,4 @@ The built-in travel vertical demonstrates the extension model:
 - `Assets/` contains approved outbound media.
 - `Tools/` contains MCP tools Aria can call.
 
-The same host runtime can load another industry vertical by implementing the shared contracts in `AgentForge.Verticals.Abstractions`.
+The same host runtime can load another industry vertical by implementing the shared contracts from the `AgentForge.Verticals.Abstractions` NuGet package.

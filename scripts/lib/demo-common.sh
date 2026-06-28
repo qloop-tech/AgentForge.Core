@@ -186,18 +186,30 @@ find_vertical_project() {
     wanted="$(canonicalize_id "$vertical_id")"
     local matches=()
     local project_path
+    local search_roots=()
 
-    while IFS= read -r project_path; do
-        local project_name="${project_path##*/}"
-        project_name="${project_name%.csproj}"
-        local suffix="${project_name##*.}"
-        if [[ "$(canonicalize_id "$suffix")" == "$wanted" ]]; then
-            matches+=("$project_path")
-        fi
-    done < <(find "$DEMO_REPO_ROOT/src/Verticals" -name '*.csproj' -print)
+    if [[ -d "$DEMO_REPO_ROOT/src/Verticals" ]]; then
+        search_roots+=("$DEMO_REPO_ROOT/src/Verticals")
+    fi
+
+    while IFS= read -r sibling_repo; do
+        [[ -d "$sibling_repo/src" ]] || continue
+        search_roots+=("$sibling_repo/src")
+    done < <(find "${DEMO_REPO_ROOT}/.." -maxdepth 1 -type d -name 'AgentForge.Verticals.*' -print)
+
+    for search_root in "${search_roots[@]}"; do
+        while IFS= read -r project_path; do
+            local project_name="${project_path##*/}"
+            project_name="${project_name%.csproj}"
+            local suffix="${project_name##*.}"
+            if [[ "$(canonicalize_id "$suffix")" == "$wanted" ]]; then
+                matches+=("$project_path")
+            fi
+        done < <(find "$search_root" -name '*.csproj' -print)
+    done
 
     if [[ "${#matches[@]}" -eq 0 ]]; then
-        die "Could not find a vertical project for '${vertical_id}'. Set VERTICAL_PROJECT_PATH if the project naming does not follow AgentForge.Verticals.<Name>."
+        die "Could not find a vertical project for '${vertical_id}'. Set VERTICAL_PROJECT_PATH to an external vertical .csproj."
     fi
 
     if [[ "${#matches[@]}" -gt 1 ]]; then

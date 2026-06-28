@@ -12,15 +12,15 @@
 
 ![Demo](docs/demo.gif)
 
-**AgentForge** is an open-source WhatsApp AI platform for service businesses. It gives you a reusable host runtime for WhatsApp messaging, agent orchestration, MCP tool execution, and Aspire-based local deployment — while letting each industry vertical plug in its own tools, prompts, workflows, and data.
+**AgentForge** is an open-source WhatsApp AI core platform for service businesses. It gives you the reusable host runtime for WhatsApp messaging, signed webhooks, Redis queueing, agent orchestration, MCP tool hosting, plugin loading, health checks, and Aspire-based deployment.
 
-The current sample vertical is **travel** (`AgentForge.Verticals.Travel`), which acts as both:
+Industry behavior lives outside this core repository as vertical plugins. QLoop Technologies publishes the plugin contract and template packages separately, and Travel is now a standalone reference implementation:
 
-- the working reference implementation
-- the first commercial wedge
-- the example of how AgentForge can later extend into industries such as salons, clinics, restaurants, or other service businesses
+- [AgentForge.Verticals.Abstractions](https://github.com/qloop-tech/AgentForge.Verticals.Abstractions)
+- [AgentForge.Vertical.Templates](https://github.com/qloop-tech/AgentForge.Vertical.Templates)
+- [AgentForge.Verticals.Travel](https://github.com/qloop-tech/AgentForge.Verticals.Travel)
 
-Today, you can clone the repo, publish the sample travel plugin, configure the secrets, and run the travel experience end to end. Under the hood, the architecture is **plugin-first**: WebApi and McpHost require an explicit vertical plugin path and report unhealthy readiness when the plugin is missing or invalid.
+The architecture is **plugin-first**: WebApi and McpHost require an explicit vertical plugin path and report unhealthy readiness when the plugin is missing or invalid.
 
 ---
 
@@ -30,7 +30,7 @@ Today, you can clone the repo, publish the sample travel plugin, configure the s
 |---|---|
 | [Architecture](docs/Architecture.md) | End-to-end message flow sequence diagram, roles, Redis queueing, inbound media guard, outbound media dispatch, and platform boundaries |
 | [Vertical Plugin System](docs/vertical-plugin-system.md) | The class-level plugin contract and how to author another industry vertical |
-| [Plugin Development Getting Started](docs/plugin-development-getting-started.md) | Tutorial for creating, publishing, and loading an external vertical plugin |
+| [Plugin Development Getting Started](docs/plugin-development-getting-started.md) | Tutorial for installing the external template package, creating, publishing, and loading a vertical plugin |
 | [Deployment Guide](docs/deployment.md) | Aspire-generated Docker Compose, production-like local demos, and Cloudflare tunnel workflow |
 | [OpenWA README](src/OpenWA/README.md) | The embedded WhatsApp API gateway and dashboard source used by AgentForge |
 | [Repository Guidelines](docs/repository-guidelines.md) | Project structure, build/test commands, style rules, PR guidance, and security tips |
@@ -43,7 +43,7 @@ At runtime, a WhatsApp user message travels through OpenWA, the signed WebApi we
 
 The canonical architecture walkthrough is the **[Architecture](docs/Architecture.md)** guide. It contains the end-to-end sequence diagram, the role of each entity, the inbound media guard, Redis Streams queueing, outbound media dispatch, and platform boundaries.
 
-For the class-level plugin loading flow, runtime contracts, and the concrete travel example, see the **[Vertical Plugin System](docs/vertical-plugin-system.md)** deep dive.
+For the class-level plugin loading flow and runtime contracts, see the **[Vertical Plugin System](docs/vertical-plugin-system.md)** deep dive.
 
 ---
 
@@ -72,38 +72,7 @@ For the class-level plugin loading flow, runtime contracts, and the concrete tra
 3. the registrar points the host at the assembly containing the vertical's tools/resources
 4. `AgentForge.McpHost` registers those tools/resources at runtime
 
-The current shipped vertical is `src/Verticals/AgentForge.Verticals.Travel/`, so the live toolset below is the **travel example vertical**, not the hard limit of the platform.
-
-### Current travel vertical tools
-
-| Category | Tool | Description |
-|---|---|---|
-| **Tour Search** | `search_tours` | Search by destination, keyword, budget, or travel month |
-| | `get_tour_details` | Full tour details — highlights, inclusions, exclusions, reviews |
-| | `check_availability` | Remaining slots for a tour in a given month |
-| | `get_pricing_breakdown` | Detailed cost breakdown by room type (single/double/triple) |
-| **Booking** | `create_booking_inquiry` | Register a customer booking inquiry with all details |
-| | `get_customer_inquiries` | Retrieve a customer's existing inquiries by phone number |
-| **Post-Booking** | `get_day_by_day_itinerary` | Day-by-day travel program |
-| | `get_departure_checklist` | Documents, health prep, and day-of instructions |
-| | `submit_trip_feedback` | Collect a star rating and comment after the trip |
-| | `get_tour_reviews` | Customer reviews and average rating for a tour |
-| **Policies** | `get_cancellation_policy` | Refund tiers based on days before departure |
-| | `get_inclusions_exclusions` | What is and is not included in a package |
-| | `get_faq_answer` | Frequently asked questions |
-| **Destinations & Promotions** | `get_destination_guide` | Best season, weather, local attractions, cuisine |
-| | `get_visa_requirements` | Visa and travel permit info per destination |
-| | `get_packing_recommendations` | Packing list tailored to destination and month |
-| | `get_active_promotions` | Current active offers and discounts |
-| | `calculate_group_discount` | Group pricing based on passenger count |
-
-### Current travel vertical resources
-
-| Resource | URI | Description |
-|---|---|---|
-| Tour Catalog | `tour://catalog` | Complete list of all available tour packages |
-| Popular Destinations | `destination://popular` | Overview of all supported destinations |
-| Company Policies | `company://policies` | Cancellation policy, group discounts, contact info |
+This core repo does not ship a vertical toolset. Use [AgentForge.Verticals.Travel](https://github.com/qloop-tech/AgentForge.Verticals.Travel) as the reference vertical, or install [AgentForge.Vertical.Templates](https://github.com/qloop-tech/AgentForge.Vertical.Templates) to create a new vertical.
 
 ---
 
@@ -116,7 +85,6 @@ whatsapp-ai-travel-agent/
 │   ├── AgentForge.AppHost/          # .NET Aspire orchestration — defines all resources, dependencies, secrets
 │   ├── AgentForge.ServiceDefaults/  # Shared defaults — OpenTelemetry, health checks, HTTP resilience, service discovery
 │   ├── OpenWA/                      # First-party OpenWA API and Vite dashboard source, orchestrated by AppHost
-│   ├── AgentForge.Verticals.Abstractions/ # NuGet-ready contracts for vertical metadata, MCP, and scheduled message intents
 │   ├── AgentForge.Verticals.Hosting/ # Shared loader boundary used by both hosts to resolve the active vertical
 │   ├── AgentForge.McpHost/          # Generic MCP host — loads tools/resources from the active vertical plugin
 │   ├── AgentForge.WebApi/           # AI gateway — receives webhooks, runs the active vertical agent, sends WhatsApp replies
@@ -124,11 +92,9 @@ whatsapp-ai-travel-agent/
 │   │   ├── Services/                #   AgentChatService, VerticalAgentFactory, OpenWaApiClient, WebhookRegistrationService, McpClientProvider
 │   │   ├── Queue/                   #   WhatsAppMessageQueue (Redis Streams background service)
 │   │   └── Scheduling/              #   SchedulerService (generic scheduled action dispatcher)
-│   └── Verticals/
-│       └── AgentForge.Verticals.Travel/ # Travel plugin: config pack, prompt, tools, resources, services, data, scheduled actions
 ├── tests/
-│   ├── AgentForge.WebApi.Tests/     # Webhook, OpenWA client, parser, dispatcher, and guard tests
-│   └── AgentForge.Verticals.Travel.Tests/ # Travel tools, data, media, and asset tests
+│   ├── AgentForge.TestVertical.Plugin/ # Test-only plugin fixture for loader tests
+│   └── AgentForge.WebApi.Tests/     # Webhook, OpenWA client, parser, dispatcher, guard, and loader tests
 └── artifacts/                       # Reserved for build and plugin outputs
 ```
 
@@ -143,7 +109,7 @@ This repository is now structured so the **host runtime stays generic** while ea
 - `AgentForge.AppHost` — Aspire orchestration, secrets, OpenWA resources, DevTunnel, MCP Inspector, Compose publish flow
 - `AgentForge.WebApi` — webhook handling, session management, queueing, agent execution, OpenWA sending
 - `AgentForge.McpHost` — generic MCP host that loads tools/resources from the active vertical
-- `AgentForge.Verticals.Abstractions` — shared plugin contracts such as `IVerticalPlugin`, `IVerticalDescriptor`, `IVerticalMcpRegistrar`, and `IScheduledActionHandler`
+- `AgentForge.Verticals.Abstractions` — external NuGet contract package for `IVerticalPlugin`, `IVerticalDescriptor`, `IVerticalMcpRegistrar`, and `IScheduledActionHandler`
 - `AgentForge.Verticals.Hosting` — `AssemblyLoadContext`-based plugin loading, bootstrap state, and plugin health checks
 
 ### Vertical-owned pieces
@@ -230,18 +196,19 @@ dotnet user-secrets set "ConnectionStrings:ai-foundry" "Endpoint=https://...;Key
 
 > **Tip:** `openWaApiKey` protects the OpenWA REST API. `openWaWebhookSecret` is a separate shared secret used for OpenWA's HMAC-signed webhook delivery to `/webhook`. Keep them different.
 
-### 3. Publish and configure the sample plugin
+### 3. Publish and configure a vertical plugin
 
-The core platform does not silently fall back to Travel. For the sample experience, publish the Travel plugin bundle and point the local AppHost at it:
+The core platform does not silently fall back to any vertical. For the Travel reference implementation, clone and publish the external Travel plugin:
 
 ```bash
 cd ../..
-dotnet publish src/Verticals/AgentForge.Verticals.Travel/AgentForge.Verticals.Travel.csproj -c Release -o artifacts/plugins/travel
+git clone https://github.com/qloop-tech/AgentForge.Verticals.Travel.git ../AgentForge.Verticals.Travel
+dotnet publish ../AgentForge.Verticals.Travel/src/AgentForge.Verticals.Travel/AgentForge.Verticals.Travel.csproj -c Release -o artifacts/plugins/travel
 cd src/AgentForge.AppHost
 dotnet user-secrets set "Parameters:vertical-plugin-path" "$(pwd)/../../artifacts/plugins/travel"
 ```
 
-For a new external plugin, use `dotnet new agentforge-vertical` and publish that plugin folder instead.
+For a new vertical, install `AgentForge.Vertical.Templates`, generate a plugin, and publish that plugin folder instead.
 
 ### 4. Log in to DevTunnel
 
@@ -386,15 +353,7 @@ The dashboard parameters are therefore an **optional override UX**. A valid plug
 
 ### Customer config pack layout
 
-The bundled travel defaults now live under:
-
-```text
-src/Verticals/AgentForge.Verticals.Travel/Configuration/
-├── customer-profile.json
-└── prompt.md
-```
-
-To onboard a customer without recompiling, mount a folder with the same shape and point `CUSTOMER_CONFIG_PATH` at it:
+Vertical plugins may provide bundled defaults and may also support customer configuration overrides. To onboard a customer without recompiling, mount a folder with this shape and point `CUSTOMER_CONFIG_PATH` at it:
 
 ```text
 customer-config/
@@ -402,38 +361,7 @@ customer-config/
 └── prompt.md   # optional override; falls back to the bundled prompt if omitted
 ```
 
-`customer-profile.json` is bound through the .NET Options pattern, so branding, MCP server name, preview text, lead-capture fields, capabilities, business hours, and handoff rules are strongly typed and validated on startup.
-
----
-
-## Customising the Current Travel Vertical
-
-### Replace the tour catalog
-
-Edit the JSON data files in `src/Verticals/AgentForge.Verticals.Travel/Data/`:
-
-- `TourCatalog.json` — tour packages (name, destination, duration, price, tags, highlights)
-- `DestinationGuide.json` — destination guides (best season, visa, packing, attractions)
-- `AgencyInfo.json` — cancellation tiers, group discounts, contact info
-- `FAQ.json` — frequently asked questions
-- `Promotions.json` — active promotional offers and discounts
-
-### Change the AI persona
-
-Edit the bundled config pack in `src/Verticals/AgentForge.Verticals.Travel/Configuration/`:
-
-- `customer-profile.json` — display name, agent metadata, MCP server name, preview defaults, lead-capture fields, capabilities, business hours, handoff rules
-- `prompt.md` — the long-form travel system prompt template
-
-For customer onboarding, prefer an external folder plus `CUSTOMER_CONFIG_PATH` so you do not need to recompile the plugin.
-
-### Add new MCP tools
-
-1. Create a new `*Tools.cs` class in `src/Verticals/AgentForge.Verticals.Travel/Tools/` decorated with `[McpServerToolType]`
-2. Add `[McpServerTool]` methods — they are auto-registered via `WithToolsFromAssembly`
-3. Inject any services you need through the constructor — standard DI applies
-
-No changes needed in `AgentForge.WebApi` — the agent discovers new tools on startup.
+The exact schema is owned by the active vertical plugin.
 
 ---
 

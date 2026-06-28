@@ -8,11 +8,11 @@ This tutorial creates an external AgentForge vertical plugin as a separate Class
 dotnet new install AgentForge.Vertical.Templates
 ```
 
-For local development before the package is published, install from the packed `.nupkg` created by this repo:
+Before the package is published to NuGet.org, maintainers can install from a locally packed `.nupkg` created by the external template repo:
 
 ```bash
-dotnet pack src/AgentForge.Vertical.Templates/AgentForge.Vertical.Templates.csproj
-dotnet new install artifacts/packages/AgentForge.Vertical.Templates.0.1.0.nupkg
+dotnet pack ../AgentForge.Vertical.Templates/src/AgentForge.Vertical.Templates/AgentForge.Vertical.Templates.csproj
+dotnet new install <path-to-packed-AgentForge.Vertical.Templates.0.1.0.nupkg>
 ```
 
 ## 2. Create a New Vertical

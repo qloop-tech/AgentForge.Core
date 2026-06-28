@@ -2,11 +2,11 @@
 
 ## Project Structure & Module Organization
 
-`AgentForge.slnx` is the .NET solution root. Core projects live under `src/`: `AgentForge.AppHost` is the Aspire orchestration entry point, `AgentForge.WebApi` handles webhook/API traffic, `AgentForge.McpHost` hosts vertical tools, and `AgentForge.Verticals.*` contains shared vertical abstractions/hosting. The OpenWA API and dashboard source live in `src/OpenWA`, with the Vite dashboard under `src/OpenWA/dashboard`.
+`AgentForge.slnx` is the .NET solution root for the core WhatsApp platform. Core projects live under `src/`: `AgentForge.AppHost` is the Aspire orchestration entry point, `AgentForge.WebApi` handles webhook/API traffic, `AgentForge.McpHost` hosts vertical tools, and `AgentForge.Verticals.Hosting` contains the runtime plugin loader and health checks. The OpenWA API and dashboard source live in `src/OpenWA`, with the Vite dashboard under `src/OpenWA/dashboard`.
 
-Vertical-specific prompts, data, tools, and assets belong in the vertical project. For Travel, use `src/Verticals/AgentForge.Verticals.Travel/{Configuration,Data,Tools,Assets}`. Do not move vertical assets back into `AgentForge.WebApi/wwwroot`.
+Vertical-specific prompts, data, tools, and assets belong in external vertical repositories such as `../AgentForge.Verticals.Travel`. Do not move vertical assets back into `AgentForge.WebApi/wwwroot`.
 
-Tests live in `tests/AgentForge.WebApi.Tests` and `tests/AgentForge.Verticals.Travel.Tests`.
+Core tests live in `tests/AgentForge.WebApi.Tests`; `tests/AgentForge.TestVertical.Plugin` is a test-only plugin fixture for loader tests.
 
 ## Build, Test, and Development Commands
 

@@ -1,6 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
+using AgentForge.TestVertical.Plugin;
 using AgentForge.Verticals.Hosting;
-using AgentForge.Verticals.Travel;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -64,19 +64,19 @@ public sealed class VerticalPluginBootstrapStateTests
     public void Create_with_valid_direct_plugin_path_loads_plugin()
     {
         var configuration = new ConfigurationManager();
-        configuration["VERTICAL_PLUGIN_PATH"] = typeof(TravelVerticalPlugin).Assembly.Location;
+        configuration["VERTICAL_PLUGIN_PATH"] = typeof(TestVerticalPlugin).Assembly.Location;
 
         var state = VerticalPluginBootstrapState.Create(configuration);
 
         Assert.True(state.IsLoaded);
-        Assert.Equal(typeof(TravelVerticalPlugin).FullName, state.Plugin?.GetType().FullName);
+        Assert.Equal(typeof(TestVerticalPlugin).FullName, state.Plugin?.GetType().FullName);
     }
 
     [Fact]
     public void TryValidateReady_returns_true_when_descriptor_can_be_created()
     {
         var configuration = new ConfigurationManager();
-        configuration["VERTICAL_PLUGIN_PATH"] = typeof(TravelVerticalPlugin).Assembly.Location;
+        configuration["VERTICAL_PLUGIN_PATH"] = typeof(TestVerticalPlugin).Assembly.Location;
         var state = VerticalPluginBootstrapState.Create(configuration);
         using var provider = CreateProvider(state, configuration);
 
@@ -103,7 +103,7 @@ public sealed class VerticalPluginBootstrapStateTests
     public async Task HealthCheck_reports_healthy_when_plugin_is_ready()
     {
         var configuration = new ConfigurationManager();
-        configuration["VERTICAL_PLUGIN_PATH"] = typeof(TravelVerticalPlugin).Assembly.Location;
+        configuration["VERTICAL_PLUGIN_PATH"] = typeof(TestVerticalPlugin).Assembly.Location;
         var state = VerticalPluginBootstrapState.Create(configuration);
         using var provider = CreateProvider(state, configuration);
         var healthCheck = new VerticalPluginHealthCheck(state, provider);

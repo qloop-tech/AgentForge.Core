@@ -6,13 +6,13 @@ For the platform overview, architecture, and roadmap, start with the [main READM
 
 The repository supports **Aspire-generated Docker Compose** for VPS/self-hosted deployments.
 
-### Publish the travel plugin
+### Publish an external vertical plugin
 
 ```bash
-dotnet publish src/Verticals/AgentForge.Verticals.Travel/AgentForge.Verticals.Travel.csproj
+dotnet publish ../AgentForge.Verticals.Travel/src/AgentForge.Verticals.Travel/AgentForge.Verticals.Travel.csproj -c Release -o artifacts/plugins/travel
 ```
 
-By default this writes the runtime-loadable travel plugin to:
+This writes the runtime-loadable plugin bundle to:
 
 ```text
 artifacts/plugins/travel/
@@ -47,7 +47,7 @@ This generates:
 1. Publish the active vertical plugin:
 
    ```bash
-   dotnet publish src/Verticals/AgentForge.Verticals.Travel/AgentForge.Verticals.Travel.csproj -c Release -o artifacts/plugins/travel
+   dotnet publish ../AgentForge.Verticals.Travel/src/AgentForge.Verticals.Travel/AgentForge.Verticals.Travel.csproj -c Release -o artifacts/plugins/travel
    ```
 
 2. Build the two .NET service images that the generated Compose file expects:
