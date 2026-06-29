@@ -1,0 +1,121 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to package, for example v0.2.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY_ENDPOINT: ghcr.io
+  REGISTRY_REPOSITORY: qloop-tech/agentforge-core
+  APPHOST: src/AgentForge.AppHost/AgentForge.AppHost.csproj
+  CI_AI_FOUNDRY: Endpoint=https://ci.invalid;Key=ci
+  Parameters__composeDashboardBrowserToken: ci-dashboard-token
+  Parameters__openWaApiKey: ci-openwa-key
+  Parameters__openWaEncryptionKey: ci-openwa-encryption-key
+  Parameters__openWaWebhookSecret: ci-openwa-webhook-secret
+  Parameters__openWaPostgresPassword: ci-openwa-postgres-password
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            release_version="${{ inputs.release_tag }}"
+          else
+            release_version="${{ github.event.release.tag_name }}"
+          fi
+
+          if [[ ! "$release_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tag must look like vX.Y.Z. Got: $release_version" >&2
+            exit 1
+          fi
+
+          echo "release_version=$release_version" >> "$GITHUB_OUTPUT"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install Aspire CLI
+        shell: bash
+        run: |
+          curl -sSL https://aspire.dev/install.sh | bash
+          echo "$HOME/.aspire/bin" >> "$GITHUB_PATH"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Test
+        run: dotnet test AgentForge.slnx
+
+      - name: Verify Aspire push graph
+        env:
+          IMAGE_TAG: ${{ steps.version.outputs.release_version }}
+          Parameters__registry_endpoint: ${{ env.REGISTRY_ENDPOINT }}
+          Parameters__registry_repository: ${{ env.REGISTRY_REPOSITORY }}
+        run: env "ConnectionStrings__ai-foundry=${CI_AI_FOUNDRY}" aspire do push --apphost "$APPHOST" --list-steps --non-interactive
+
+      - name: Build and push images with Aspire
+        env:
+          IMAGE_TAG: ${{ steps.version.outputs.release_version }}
+          Parameters__registry_endpoint: ${{ env.REGISTRY_ENDPOINT }}
+          Parameters__registry_repository: ${{ env.REGISTRY_REPOSITORY }}
+        run: env "ConnectionStrings__ai-foundry=${CI_AI_FOUNDRY}" aspire do push --apphost "$APPHOST" --non-interactive
+
+      - name: Publish Compose artifacts with Aspire
+        env:
+          IMAGE_TAG: ${{ steps.version.outputs.release_version }}
+          Parameters__registry_endpoint: ${{ env.REGISTRY_ENDPOINT }}
+          Parameters__registry_repository: ${{ env.REGISTRY_REPOSITORY }}
+        run: |
+          rm -rf release/aspire-output release/dist
+          env "ConnectionStrings__ai-foundry=${CI_AI_FOUNDRY}" aspire publish --apphost "$APPHOST" -o release/aspire-output --non-interactive
+
+      - name: Package release bundle
+        run: |
+          scripts/release/package-release.sh \
+            "${{ steps.version.outputs.release_version }}" \
+            release/aspire-output \
+            release/dist
+
+      - name: Upload release assets
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ steps.version.outputs.release_version }}
+        run: |
+          gh release upload "$RELEASE_VERSION" \
+            "release/dist/agentforge-core-${RELEASE_VERSION}.zip" \
+            "release/dist/agentforge-core-${RELEASE_VERSION}.zip.sha256" \
+            --clobber
+
+      - name: Upload workflow artifacts
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentforge-core-${{ steps.version.outputs.release_version }}
+          path: |
+            release/dist/agentforge-core-${{ steps.version.outputs.release_version }}.zip
+            release/dist/agentforge-core-${{ steps.version.outputs.release_version }}.zip.sha256

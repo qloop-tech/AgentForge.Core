@@ -1,0 +1,9 @@
+# install.sh generates .agentforge/Caddyfile from this routing shape.
+#
+# VPS mode uses HTTPS site labels:
+#   ${ASPIRE_HOSTNAME}  -> compose-dashboard:18888
+#   ${OPENWA_HOSTNAME}  -> openwa-dashboard:5000
+#   ${WEBHOOK_HOSTNAME} -> webhook:${WEBHOOK_PORT}
+#
+# local-cloudflare mode disables Caddy automatic HTTPS and uses http:// site
+# labels because Cloudflare terminates public HTTPS before forwarding to Caddy.

@@ -10,7 +10,8 @@ internal sealed record AppHostSettings(
     string VerticalPluginMountPath,
     string? CustomerConfigSourcePath,
     string CustomerConfigPath,
-    string? ConfiguredWebhookBaseUrl)
+    string? ConfiguredWebhookBaseUrl,
+    string ImageTag)
 {
     public bool HasCustomerConfigPath => !string.IsNullOrWhiteSpace(CustomerConfigPath);
 
@@ -18,10 +19,10 @@ internal sealed record AppHostSettings(
 
     public static AppHostSettings Load(IConfiguration configuration, bool isPublishMode)
     {
-        var verticalId = configuration["VERTICAL_ID"] ?? "travel";
+        var verticalId = configuration["VERTICAL_ID"] ?? (isPublishMode ? "${VERTICAL_ID}" : "travel");
         var verticalPluginRoot = configuration["VERTICAL_PLUGIN_ROOT"] ?? "/app/plugins";
         var verticalPluginSourcePath = configuration["VERTICAL_PLUGIN_SOURCE_PATH"]
-            ?? $"../../artifacts/plugins/{verticalId}";
+            ?? (isPublishMode ? "${VERTICAL_PLUGIN_HOST_PATH}" : $"../../artifacts/plugins/{verticalId}");
         var verticalPluginMountPath = $"{verticalPluginRoot.TrimEnd('/')}/{verticalId}";
         var configuredCustomerConfigPath = configuration["CUSTOMER_CONFIG_PATH"];
         var customerConfigSourcePath = configuration["CUSTOMER_CONFIG_SOURCE_PATH"];
@@ -29,6 +30,7 @@ internal sealed record AppHostSettings(
             ? configuredCustomerConfigPath
             : isPublishMode && !string.IsNullOrWhiteSpace(customerConfigSourcePath) ? "/app/customer-config" : string.Empty;
         var configuredWebhookBaseUrl = configuration["WEBHOOK_BASE_URL"];
+        var imageTag = configuration["IMAGE_TAG"] ?? configuration["RELEASE_VERSION"] ?? "local";
 
         return new AppHostSettings(
             isPublishMode,
@@ -38,6 +40,7 @@ internal sealed record AppHostSettings(
             verticalPluginMountPath,
             customerConfigSourcePath,
             customerConfigPath,
-            configuredWebhookBaseUrl);
+            configuredWebhookBaseUrl,
+            imageTag);
     }
 }

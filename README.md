@@ -4,9 +4,9 @@
 [![.NET 10](https://img.shields.io/badge/.NET-10-purple.svg)](https://dotnet.microsoft.com/)
 [![Aspire](https://img.shields.io/badge/Aspire-13.3-blueviolet.svg)](https://learn.microsoft.com/en-us/dotnet/aspire/)
 [![OpenWA](https://img.shields.io/badge/OpenWA-self--hosted-green.svg)](https://www.open-wa.org/)
-[![GitHub Stars](https://img.shields.io/github/stars/goldytech/whatsapp-ai-travel-agent?style=social)](https://github.com/goldytech/whatsapp-ai-travel-agent)
+[![GitHub Stars](https://img.shields.io/github/stars/qloop-tech/AgentForge.Core?style=social)](https://github.com/qloop-tech/AgentForge.Core)
 
-> ⭐ If this project saves you time or inspires your work, please **[give it a star](https://github.com/goldytech/whatsapp-ai-travel-agent)** — it helps others discover it and keeps the momentum going!
+> ⭐ If this project saves you time or inspires your work, please **[give it a star](https://github.com/qloop-tech/AgentForge.Core)** — it helps others discover it and keeps the momentum going!
 
 ## Demo
 
@@ -31,7 +31,7 @@ The architecture is **plugin-first**: WebApi and McpHost require an explicit ver
 | [Architecture](docs/Architecture.md) | End-to-end message flow sequence diagram, roles, Redis queueing, inbound media guard, outbound media dispatch, and platform boundaries |
 | [Vertical Plugin System](docs/vertical-plugin-system.md) | The class-level plugin contract and how to author another industry vertical |
 | [Plugin Development Getting Started](docs/plugin-development-getting-started.md) | Tutorial for installing the external template package, creating, publishing, and loading a vertical plugin |
-| [Deployment Guide](docs/deployment.md) | Aspire-generated Docker Compose, production-like local demos, and Cloudflare tunnel workflow |
+| [Deployment Guide](docs/deployment.md) | GitHub Release bundles, Aspire-owned Compose artifacts, VPS installs, local Cloudflare rehearsal, and uninstall |
 | [OpenWA README](src/OpenWA/README.md) | The embedded WhatsApp API gateway and dashboard source used by AgentForge |
 | [Repository Guidelines](docs/repository-guidelines.md) | Project structure, build/test commands, style rules, PR guidance, and security tips |
 
@@ -173,8 +173,8 @@ The result is the same generic WhatsApp host runtime with a different business-s
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/goldytech/whatsapp-ai-travel-agent.git
-cd whatsapp-ai-travel-agent
+git clone https://github.com/qloop-tech/AgentForge.Core.git
+cd AgentForge.Core
 ```
 
 ### 2. Configure secrets
@@ -232,6 +232,37 @@ Open the Aspire Dashboard link printed in the terminal to monitor all services.
 ### 6. Connect WhatsApp (scan QR)
 
 Follow the **OpenWA Dashboard Configuration** section below to link your WhatsApp account.
+
+---
+
+## Production Release Deployment
+
+Production installs use the GitHub Release zip, not the source tree. The release workflow uses
+`AgentForge.AppHost` and Aspire CLI to build/push GHCR images, generate Docker Compose artifacts,
+and publish `agentforge-core-<version>.zip`.
+
+On a VPS:
+
+```bash
+unzip agentforge-core-vX.Y.Z.zip
+cd agentforge-core-vX.Y.Z
+mkdir -p plugins/<vertical-id>
+# copy the published vertical plugin bundle into plugins/<vertical-id>/
+./install.sh --mode vps
+```
+
+For local Mac mini rehearsal with Cloudflare Tunnel:
+
+```bash
+./install.sh --mode local-cloudflare
+```
+
+The installer uses `.env`, generates missing secrets, prints the Aspire dashboard token and OpenWA
+dashboard API key, and pins all core images to the release tag. Remove the stack with
+`./uninstall.sh`; use `./uninstall.sh --purge-all` only when you want to wipe AgentForge-owned
+volumes, images, generated config, and installer state.
+
+See the [Deployment Guide](docs/deployment.md) for the full VPS and rehearsal flow.
 
 ---
 
@@ -310,7 +341,7 @@ If you upgrade the `CommunityToolkit.Aspire.Hosting.McpInspector` package in the
 
 ## Configuration Reference
 
-Secrets stay in AppHost user secrets. Customer-facing branding, prompt text, and business-profile settings can be layered from a mounted config folder without recompiling the travel plugin.
+Local development secrets stay in AppHost user secrets. Production release-bundle deployments use the generated `.env` file written by `install.sh`; do not rely on local user-secrets on a VPS. Customer-facing branding, prompt text, and business-profile settings can be layered from a mounted config folder without recompiling the active plugin.
 
 Aspire parameters are used for **promptable runtime inputs**. Graph-shaping AppHost values stay as ordinary configuration so the resource graph can be built deterministically before the dashboard starts.
 
@@ -325,7 +356,7 @@ Aspire parameters are used for **promptable runtime inputs**. Graph-shaping AppH
 | `OPENWA_DASHBOARD_HOST_PORT` | Optional env var on published Compose deployments | Host port exposing the OpenWA dashboard (`2886` by default) |
 | `VERTICAL_ID` | Optional env var on `AgentForge.AppHost` | Active vertical ID for Compose publishing and runtime selection (`travel` by default) |
 | `VERTICAL_PLUGIN_ROOT` | Optional env var on `AgentForge.AppHost` | Container-side root path mounted into `AgentForge.WebApi` and `AgentForge.McpHost` during Compose publish (`/app/plugins` by default) |
-| `VERTICAL_PLUGIN_SOURCE_PATH` | Optional env var on `AgentForge.AppHost` | Host-side plugin folder to bind-mount during Compose publish (defaults to `../../artifacts/plugins/{VERTICAL_ID}` relative to `src/AgentForge.AppHost/`) |
+| `VERTICAL_PLUGIN_SOURCE_PATH` | Optional env var on `AgentForge.AppHost` | Host-side plugin folder to bind-mount during Compose publish. Release artifacts default to `${VERTICAL_PLUGIN_HOST_PATH}` so the target server supplies the plugin folder. |
 | `CUSTOMER_CONFIG_SOURCE_PATH` | Optional env var on `AgentForge.AppHost` | Host-side customer config folder to bind-mount during Compose publish; when set, the AppHost also passes `CUSTOMER_CONFIG_PATH` into both hosts |
 | `CUSTOMER_CONFIG_PATH` | Optional env var on `AgentForge.WebApi` / `AgentForge.McpHost` | Path to a customer config folder containing `customer-profile.json` and optionally `prompt.md`; when unset, the active plugin can use its bundled defaults |
 | `VERTICAL_PLUGIN_PATH` | Env var on `AgentForge.WebApi` / `AgentForge.McpHost` | Path to an external published vertical plugin folder or DLL |

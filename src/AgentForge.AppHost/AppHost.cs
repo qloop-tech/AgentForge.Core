@@ -8,6 +8,9 @@ using Projects;
 var builder = DistributedApplication.CreateBuilder(args);
 var settings = AppHostSettings.Load(builder.Configuration, builder.ExecutionContext.IsPublishMode);
 var localParameters = AppHostLocalParameters.Create(builder, settings.IsPublishMode);
+var registryEndpoint = builder.AddParameter("registry-endpoint", "ghcr.io", publishValueAsDefault: true);
+var registryRepository = builder.AddParameter("registry-repository", "qloop-tech/agentforge-core", publishValueAsDefault: true);
+var containerRegistry = builder.AddContainerRegistry("container-registry", registryEndpoint, registryRepository);
 
 #region Secrets
 var openWaApiKey = builder.AddParameter("openWaApiKey", secret: true);
@@ -65,6 +68,7 @@ var openWa = builder.AddNodeApp("openwa", "../OpenWA", "dist/main")
     .WithEnvironment("SOCKET_IO_PATH", "/api/socket.io")
     .WithEnvironment("AUTO_START_SESSIONS", "true")
     .WithHttpHealthCheck("/api/health")
+    .WithContainerRegistry(containerRegistry)
     .WaitFor(openWaPostgres)
     .WaitFor(openWaRedis);
 openWa.WithUrl($"{openWa.Resource.GetEndpoint("http")}/api/docs", "OpenWA Swagger");
@@ -72,6 +76,7 @@ openWa.WithUrl($"{openWa.Resource.GetEndpoint("http")}/api/docs", "OpenWA Swagge
 var openWaDashboard = builder.AddViteApp("openwa-dashboard", "../OpenWA/dashboard")
     .WithEnvironment("OPENWA_HTTP", openWa.GetEndpoint("http"))
     .WithEnvironment("VITE_SOCKET_IO_PATH", "/api/socket.io")
+    .WithContainerRegistry(containerRegistry)
     .WaitFor(openWa);
 openWaDashboard.PublishAsStaticWebsite("/api", openWa, options =>
 {
@@ -83,6 +88,7 @@ var openWaEndpoint = openWa.Resource.GetEndpoint("http");
 
 var mcpServer = builder.AddProject<AgentForge_McpHost>("mcpserver")
     .WithHttpHealthCheck("/health")
+    .WithContainerRegistry(containerRegistry)
     .WithLocalVerticalInputs(localParameters)
     .WithPublishVerticalRuntime(settings, "mcpserver");
 
@@ -90,6 +96,7 @@ var aiFoundry = builder.AddConnectionString("ai-foundry");
 
 var webhookApi = builder.AddProject<AgentForge_WebApi>("webhook")
     .WithHttpHealthCheck("/health")
+    .WithContainerRegistry(containerRegistry)
     .WithReference(openWaEndpoint)
     .WithReference(mcpServer)
     .WithReference(aiFoundry)
@@ -123,6 +130,20 @@ if (!settings.IsPublishMode)
 #region Publish-only resources
 if (settings.IsPublishMode)
 {
+    mcpServer.PublishAsDockerFile(container =>
+    {
+        container
+            .WithImageTag(settings.ImageTag)
+            .WithContainerRegistry(containerRegistry);
+    });
+
+    webhookApi.PublishAsDockerFile(container =>
+    {
+        container
+            .WithImageTag(settings.ImageTag)
+            .WithContainerRegistry(containerRegistry);
+    });
+
     openWa.PublishAsDockerFile(container =>
     {
         container
@@ -167,7 +188,16 @@ if (settings.IsPublishMode)
                 ENTRYPOINT ["dumb-init", "--"]
                 CMD ["node", "dist/main"]
                 """)
+            .WithImageTag(settings.ImageTag)
+            .WithContainerRegistry(containerRegistry)
             .WithVolume("openwa-data", "/app/data");
+    });
+
+    openWaDashboard.PublishAsDockerFile(container =>
+    {
+        container
+            .WithImageTag(settings.ImageTag)
+            .WithContainerRegistry(containerRegistry);
     });
 
     openWaDashboard.PublishAsDockerComposeService((_, service) =>
@@ -201,6 +231,46 @@ if (settings.IsPublishMode)
                 "OPENWA_DASHBOARD_HOST_PORT",
                 "2886",
                 "Host port that exposes the published OpenWA dashboard for VPS setup, QR scanning, or an external tunnel.");
+            SetEnvMetadata(
+                env,
+                "VERTICAL_ID",
+                settings.VerticalId,
+                "Active vertical id. The default plugin folder is plugins/<vertical-id>.");
+            SetEnvMetadata(
+                env,
+                "VERTICAL_PLUGIN_HOST_PATH",
+                null,
+                "Absolute host path to the published vertical plugin folder copied to the target machine.");
+            SetEnvMetadata(
+                env,
+                "IMAGE_TAG",
+                settings.ImageTag,
+                "Container image tag. Release bundles pin this to the GitHub Release tag.");
+            SetEnvMetadata(
+                env,
+                "CADDY_HTTP_HOST_PORT",
+                "80",
+                "Host HTTP port used by the Caddy ingress service.");
+            SetEnvMetadata(
+                env,
+                "CADDY_HTTPS_HOST_PORT",
+                "443",
+                "Host HTTPS port used by the Caddy ingress service.");
+            SetEnvMetadata(
+                env,
+                "ASPIRE_HOSTNAME",
+                null,
+                "Public hostname for the published Aspire dashboard.");
+            SetEnvMetadata(
+                env,
+                "OPENWA_HOSTNAME",
+                null,
+                "Public hostname for the OpenWA dashboard.");
+            SetEnvMetadata(
+                env,
+                "WEBHOOK_HOSTNAME",
+                null,
+                "Public hostname for WhatsApp webhook delivery.");
         })
         .WithDashboard(dashboard => dashboard
             .WithEnvironment("Dashboard__ApplicationName", "AgentForge")

@@ -7,6 +7,7 @@ riderModule.iml
 .playwright-cli/
 *.user
 .env
+plugins/
 *.csproj.lscache
 .DS_Store
 artifacts/*
