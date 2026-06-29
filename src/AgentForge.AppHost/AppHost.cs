@@ -23,6 +23,7 @@ var openWaRedis = builder.AddRedis("openwa-redis")
     .WithRedisInsight();
 
 var openWaPostgres = builder.AddPostgres("openwa-postgres", password: openWaPostgresPassword)
+    .WithEnvironment("POSTGRES_DB", "openwa")
     .WithDataVolume()
     .WithPgWeb();
 var openWaDatabase = openWaPostgres.AddDatabase("openwa-db", "openwa");
@@ -54,7 +55,7 @@ var openWa = builder.AddNodeApp("openwa", "../OpenWA", "dist/main")
     .WithEnvironment("REDIS_HOST", openWaRedisEndpoint.Property(EndpointProperty.Host))
     .WithEnvironment("REDIS_PORT", openWaRedisEndpoint.Property(EndpointProperty.Port))
     .WithEnvironment("REDIS_PASSWORD", openWaRedis.Resource.PasswordParameter!)
-    .WithEnvironment("REDIS_TLS", settings.IsPublishMode ? "true" : "false")
+    .WithEnvironment("REDIS_TLS", "false")
     .WithEnvironment("SESSION_DATA_PATH", $"{openWaDataPath}/sessions")
     .WithEnvironment("STORAGE_TYPE", "local")
     .WithEnvironment("STORAGE_LOCAL_PATH", $"{openWaDataPath}/media")
@@ -167,6 +168,11 @@ if (settings.IsPublishMode)
                 CMD ["node", "dist/main"]
                 """)
             .WithVolume("openwa-data", "/app/data");
+    });
+
+    openWaDashboard.PublishAsDockerComposeService((_, service) =>
+    {
+        service.Ports.Add("${OPENWA_DASHBOARD_HOST_PORT:-2886}:5000");
     });
 
     var composeDashboardBrowserToken = builder.AddParameter("composeDashboardBrowserToken", secret: true);

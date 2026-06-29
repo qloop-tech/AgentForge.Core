@@ -153,9 +153,10 @@ start_cloudflared_process() {
 
     : >"$DEMO_TUNNEL_LOG_FILE"
 
-    nohup cloudflared tunnel --config "$config_path" run "$tunnel_name" >>"$DEMO_TUNNEL_LOG_FILE" 2>&1 &
+    nohup cloudflared tunnel --config "$config_path" run "$tunnel_name" </dev/null >>"$DEMO_TUNNEL_LOG_FILE" 2>&1 &
     local pid=$!
     printf '%s\n' "$pid" >"$DEMO_TUNNEL_PID_FILE"
+    disown "$pid" 2>/dev/null || true
 
     sleep 3
 
@@ -240,6 +241,8 @@ save_current_demo_state() {
     local webhook_host_port="$4"
     local openwa_hostname="$5"
     local openwa_dashboard_host_port="$6"
+    local aspire_hostname="${7:-}"
+    local caddy_http_host_port="${8:-}"
 
     write_file_atomically "$DEMO_CURRENT_FILE" <<EOF
 VERTICAL_ID=${vertical_id}
@@ -248,5 +251,7 @@ DEMO_HOSTNAME=${webhook_hostname}
 WEBHOOK_HOST_PORT=${webhook_host_port}
 OPENWA_DEMO_HOSTNAME=${openwa_hostname}
 OPENWA_DASHBOARD_HOST_PORT=${openwa_dashboard_host_port}
+ASPIRE_DEMO_HOSTNAME=${aspire_hostname}
+CADDY_HTTP_HOST_PORT=${caddy_http_host_port}
 EOF
 }
